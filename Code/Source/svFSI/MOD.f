@@ -843,6 +843,8 @@
       LOGICAL shlEq
 !     Whether PRESTRESS is being solved
       LOGICAL pstEq
+!     Whether PRESTRETCH is being solved
+      LOGICAL pschEq
 !     Whether velocity-pressure based structural dynamics solver is used
       LOGICAL sstEq
 !     Whether to detect and apply any contact model
@@ -967,6 +969,11 @@
       REAL(KIND=RKIND), ALLOCATABLE :: pS0(:,:)
       REAL(KIND=RKIND), ALLOCATABLE :: pSn(:,:)
       REAL(KIND=RKIND), ALLOCATABLE :: pSa(:)
+
+!     Variables for prestretch calculations
+      REAL(KIND=RKIND), ALLOCATABLE :: pF0(:,:)
+      REAL(KIND=RKIND), ALLOCATABLE :: pFn(:,:)
+      REAL(KIND=RKIND), ALLOCATABLE :: pFa(:)
 
 !     Variables for variable wall properties
       REAL(KIND=RKIND), ALLOCATABLE :: vWP0(:,:)

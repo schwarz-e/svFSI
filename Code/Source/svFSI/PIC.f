@@ -41,12 +41,21 @@
       USE COMMOD
       IMPLICIT NONE
 
-      INTEGER(KIND=IKIND) iEq, s, e
-      REAL(KIND=RKIND) coef
+      INTEGER(KIND=IKIND) iEq, s, e, a, b, i
+      REAL(KIND=RKIND) coef, t1F(nsd,nsd), t2F(nsd,nsd), t3F(nsd,nsd)
 
 !     Prestress initialization
       IF (pstEq) THEN
          pS0 = pS0 + pSn
+         PRINT *, pSn(:,1)
+         Ao = 0._RKIND
+         Yo = 0._RKIND
+         Do = 0._RKIND
+      END IF
+
+!     Prestretch initialization
+      IF (pschEq) THEN
+         pF0 = pFn
          Ao = 0._RKIND
          Yo = 0._RKIND
          Do = 0._RKIND
@@ -125,7 +134,7 @@
       REAL(KIND=RKIND), INTENT(INOUT) :: Ag(tDof,tnNo), Yg(tDof,tnNo),
      2   Dg(tDof,tnNo)
 
-      INTEGER(KIND=IKIND) s, e, i, a
+      INTEGER(KIND=IKIND) s, e, i, a, j
       REAL(KIND=RKIND) coef(4)
 
       dof         = eq(cEq)%dof
@@ -151,6 +160,11 @@
          pSa(:)   = 0._RKIND
       END IF
 
+      IF (pschEq) THEN
+         pFn(:,:) = 0._RKIND
+         pFa(:)   = 0._RKIND
+      END IF
+
       RETURN
       END SUBROUTINE PICI
 !====================================================================
@@ -162,7 +176,7 @@
 
       LOGICAL :: l1, l2, l3, l4
       INTEGER(KIND=IKIND) :: s, e, a, Ac
-      REAL(KIND=RKIND) :: coef(4), r1, dUl(nsd)
+      REAL(KIND=RKIND) :: coef(4), r1, dUl(nsd), IDm(nsd*nsd)
 
       s       = eq(cEq)%s
       e       = eq(cEq)%e
@@ -236,6 +250,21 @@
             END IF
          END DO
          pSa = 0._RKIND
+      END IF
+
+!     Update prestretch at the nodes and re-initialize
+      IF (pschEq) THEN
+         CALL COMMU(pFn)
+         CALL COMMU(pFa)
+         DO a=1, tnNo
+!            PRINT *, "------------------------------"
+!            PRINT *, pFn(:,a)
+            IF (.NOT.ISZERO(pFa(a))) THEN
+               pFn(:,a) = pFn(:,a) / pFa(a)
+            END IF
+!            PRINT *, pFn(:,a)
+         END DO
+         pFa = 0._RKIND
       END IF
 
 !     Filter out the non-wall displacements for CMM equation

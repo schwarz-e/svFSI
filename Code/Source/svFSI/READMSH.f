@@ -389,6 +389,9 @@ c               END IF
             IF (rmsh%isReqd) THEN
                err = "Prestress is currently not allowed with remeshing"
             END IF
+            IF (ALLOCATED(pF0)) THEN
+               err = "Prestretch not allowed with prestress"
+            END IF
             flag = .TRUE.
             ALLOCATE(msh(iM)%x(nsymd,msh(iM)%gnNo))
             msh(iM)%x = 0._RKIND
@@ -403,6 +406,38 @@ c               END IF
             DO a=1, msh(iM)%gnNo
                Ac = msh(iM)%gN(a)
                pS0(:,Ac) = msh(iM)%x(:,a)
+            END DO
+            DEALLOCATE(msh(iM)%x)
+         END DO
+      END IF
+
+!     Read prestretch data
+      flag = .FALSE.
+      DO iM=1, nMsh
+         lPM => list%get(msh(iM)%name,"Add mesh",iM)
+
+         lPtr => lPM%get(cTmp, "Prestretch file path")
+         IF (ASSOCIATED(lPtr)) THEN
+            IF (rmsh%isReqd) THEN
+               err = "Prestretch not currently allowed with remeshing"
+            END IF
+            IF (ALLOCATED(pS0)) THEN
+               err = "Prestretch not allowed with prestress"
+            END IF
+            flag = .TRUE.
+            ALLOCATE(msh(iM)%x(nsd*nsd,msh(iM)%gnNo))
+            msh(iM)%x = 0._RKIND
+            CALL READVTUPDATA(msh(iM), cTmp, "Def_grad", nsd*nsd, 1)
+         END IF
+      END DO
+      IF (flag) THEN
+         ALLOCATE(pF0(nsd*nsd,gtnNo))
+         pF0 = 0._RKIND
+         DO iM=1, nMsh
+            IF (.NOT.ALLOCATED(msh(iM)%x)) CYCLE
+            DO a=1, msh(iM)%gnNo
+               Ac = msh(iM)%gN(a)
+               pF0(:,Ac) = msh(iM)%x(:,a)
             END DO
             DEALLOCATE(msh(iM)%x)
          END DO
@@ -592,11 +627,11 @@ c               END IF
 !--------------------------------------------------------------------
 !     This is match isoparameteric faces to each other. Project nodes
 !     from two adjacent meshes to each other based on a L2 norm.
-      SUBROUTINE MATCHFACES(lFa, pFa, lPrj, ptol)
+      SUBROUTINE MATCHFACES(xFa, yFa, lPrj, ptol)
       USE COMMOD
       USE ALLFUN
       IMPLICIT NONE
-      TYPE(faceType), INTENT(INOUT) :: lFa, pFa
+      TYPE(faceType), INTENT(INOUT) :: xFa, yFa
       TYPE(stackType), INTENT(OUT) :: lPrj
       REAL(KIND=RKIND), INTENT(IN) :: ptol
 
@@ -613,8 +648,8 @@ c               END IF
       INTEGER(KIND=IKIND), ALLOCATABLE :: nodeBlk(:)
       TYPE(blkType), ALLOCATABLE :: blk(:)
 
-      iM  = lFa%iM
-      jM  = pFa%iM
+      iM  = xFa%iM
+      jM  = yFa%iM
       iSh = 0
       jSh = 0
       DO i=1, iM-1
@@ -633,7 +668,7 @@ c               END IF
 !     We want to have approximately 1000 nodes in each block. So we
 !     calculate nBkd, which is the number of separate blockes in each
 !     direction, based on that.
-      a    = pFa%nNo
+      a    = yFa%nNo
       nBkd = NINT( (REAL(a, KIND=RKIND)/
      2   1000._RKIND)**(0.333_RKIND),  KIND=IKIND)
       IF (nBkd .EQ. 0) nBkd = 1
@@ -642,8 +677,8 @@ c               END IF
 
 !     Finding the extends of the domain and size of each block
       DO i=1, nsd
-         xMin(i) = MIN(MINVAL(x(i,iSh+lFa%gN)), MINVAL(x(i,jSh+pFa%gN)))
-         xMax(i) = MAX(MAXVAL(x(i,iSh+lFa%gN)), MAXVAL(x(i,jSh+pFa%gN)))
+         xMin(i) = MIN(MINVAL(x(i,iSh+xFa%gN)), MINVAL(x(i,jSh+yFa%gN)))
+         xMax(i) = MAX(MAXVAL(x(i,iSh+xFa%gN)), MAXVAL(x(i,jSh+yFa%gN)))
          IF (xMin(i) .LT. 0._RKIND) THEN
             xMin(i) = xMin(i)*(1._RKIND+eps)
          ELSE
@@ -663,8 +698,8 @@ c               END IF
 
 !     First finding an estimation for size of each block
       blk%n = 0
-      DO a=1, pFa%nNo
-         Ac  = pFa%gN(a) + jSh
+      DO a=1, yFa%nNo
+         Ac  = yFa%gN(a) + jSh
          iBk = FINDBLK(x(:,Ac))
          nodeBlk(a) = iBk
          blk(iBk)%n = blk(iBk)%n + 1
@@ -673,8 +708,8 @@ c               END IF
          ALLOCATE(blk(iBk)%gN(blk(iBk)%n))
       END DO
       blk%n = 0
-      DO a=1, pFa%nNo
-         Ac  = pFa%gN(a)
+      DO a=1, yFa%nNo
+         Ac  = yFa%gN(a)
          iBk = nodeBlk(a)
          blk(iBk)%n = blk(iBk)%n + 1
          blk(iBk)%gN(blk(iBk)%n) = Ac
@@ -682,8 +717,8 @@ c               END IF
 
 !     Doing the calculation for every single node on this face
       cnt  = 0
-      DO a=1, lFa%nNo
-         Ac  = lFa%gN(a)
+      DO a=1, xFa%nNo
+         Ac  = xFa%gN(a)
          iBk = FINDBLK(x(:,Ac+iSh))
 !     Checking every single node on the other face
          minS = HUGE(minS)
@@ -706,15 +741,15 @@ c               END IF
          END IF
       END DO
 
-      IF (cnt .NE. lFa%nNo) err = " Failed to project faces between <"//
-     2   TRIM(lFa%name)//"> and <"//TRIM(pFa%name)//">"
+      IF (cnt .NE. xFa%nNo) err = " Failed to project faces between <"//
+     2   TRIM(xFa%name)//"> and <"//TRIM(yFa%name)//">"
 
       IF (lPrj%n .EQ. 0) err = "Unable to find any matching node"//
-     2   " between <"//TRIM(lFa%name)//"> and <"//TRIM(pFa%name)//">"
+     2   " between <"//TRIM(xFa%name)//"> and <"//TRIM(yFa%name)//">"
 
-      IF (lPrj%n/2 .NE. lFa%nNo) err = "Mismatch in no. of "//
-     2   "projected nodes between <"//TRIM(lFa%name)//"> and <"//
-     3   TRIM(pFa%name)//">"
+      IF (lPrj%n/2 .NE. xFa%nNo) err = "Mismatch in no. of "//
+     2   "projected nodes between <"//TRIM(xFa%name)//"> and <"//
+     3   TRIM(yFa%name)//">"
 
       RETURN
       CONTAINS

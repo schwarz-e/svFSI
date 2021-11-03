@@ -105,9 +105,11 @@
             CALL CALCMESHPROPS(nMsh, msh)
             IF (resetSim) EXIT
          END IF
+      dbg = 'Calling initiator: PICP'
 
 !     Predictor step
          CALL PICP
+      dbg = 'After initiator: PICP'
 
 !     Apply Dirichlet BCs strongly
          CALL SETBCDIR(An, Yn, Dn)
@@ -122,6 +124,7 @@
             END IF
 
 !        Initiator step (quantities at n+am, n+af)
+            dbg = 'Calling initiator: PICI'
             CALL PICI(Ag, Yg, Dg)
             IF (ALLOCATED(Rd)) THEN
                Rd = 0._RKIND
@@ -264,7 +267,7 @@
          ELSE
             CALL OUTRESULT(timeP, 2, iEqOld)
          END IF
-         IF (pstEq) CALL OUTDNORM()
+         IF (pstEq .OR. pschEq) CALL OUTDNORM()
 
          IF (ibFlag) CALL IB_OUTCPUT()
 

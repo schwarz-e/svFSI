@@ -42,7 +42,8 @@
       REAL(KIND=RKIND), INTENT(OUT) :: timeP(3)
 
       LOGICAL :: flag
-      INTEGER(KIND=IKIND) :: i, a, iEq, iDmn, iM, iFa, ierr, nnz, gnnz
+      INTEGER(KIND=IKIND) :: i, a, iEq, iDmn, iM, iFa, ierr, nnz, gnnz,
+     2                       j
       CHARACTER(LEN=stdL) :: fTmp, sTmp
       REAL(KIND=RKIND) :: am
       TYPE(FSILS_commuType) :: communicator
@@ -238,6 +239,22 @@
          pS0 = 0._RKIND
          pSn = 0._RKIND
          pSa = 0._RKIND
+      END IF
+
+!     PRESTRETCH
+      IF (pschEq) THEN
+         IF (ALLOCATED(pF0)) err = "Prestretch already allocated. "//
+     2      "Correction needed"
+         ALLOCATE(pF0(nsd*nsd,tnNo), pFn(nsd*nsd,tnNo), pFa(tnNo))
+         pF0 = 0._RKIND
+         pFn = 0._RKIND
+         pFa = 0._RKIND
+         DO i=1, tnNo
+            DO j=1,nsd
+               pF0(nsd*(j-1)+j,i) = 1
+               pFn(nsd*(j-1)+j,i) = 1
+            END DO
+         END DO
       END IF
 
 !     Electrophysiology
@@ -663,6 +680,10 @@
       IF (ALLOCATED(pS0))      DEALLOCATE(pS0)
       IF (ALLOCATED(pSn))      DEALLOCATE(pSn)
       IF (ALLOCATED(pSa))      DEALLOCATE(pSa)
+
+      IF (ALLOCATED(pF0))      DEALLOCATE(pF0)
+      IF (ALLOCATED(pFn))      DEALLOCATE(pFn)
+      IF (ALLOCATED(pFa))      DEALLOCATE(pFa)
 
 !     Varwall properties -----------------------------------------------
       IF (ALLOCATED(vWP0))      DEALLOCATE(vWP0)

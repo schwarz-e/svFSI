@@ -48,8 +48,8 @@
 
       INTEGER(KIND=IKIND), ALLOCATABLE :: ptr(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), al(:,:), dl(:,:),
-     2   dol(:,:), bfl(:,:), pS0l(:,:), pSl(:), N(:), Nx(:,:), lR(:,:),
-     3   lK(:,:,:)
+     2   dol(:,:), bfl(:,:), pS0l(:,:), pSl(:), pF0l(:,:), pFl(:), N(:),
+     3   Nx(:,:), lR(:,:), lK(:,:,:)
 
       eNoN = lM%eNoN
       IF (.NOT.mvMsh) err = "Mesh equation is solved for moving mesh/"//
@@ -58,7 +58,8 @@
 !     MESH: dof = nsd
       ALLOCATE(ptr(eNoN), xl(nsd,eNoN), al(tDof,eNoN), dl(tDof,eNoN),
      2   dol(nsd,eNoN), bfl(nsd,eNoN), pS0l(nsymd,eNoN), pSl(nsymd),
-     3   N(eNoN), Nx(nsd,eNoN), lR(dof,eNoN), lK(dof*dof,eNoN,eNoN))
+     3   N(eNoN), Nx(nsd,eNoN), lR(dof,eNoN), lK(dof*dof,eNoN,eNoN),
+     4   pF0l(nsd*nsd,eNoN), pFl(nsd*nsd))
 
 !     Start and end DOF
       is = nsd + 2
@@ -77,6 +78,7 @@
 !        Create local copies
          bfl  = 0._RKIND
          pS0l = 0._RKIND
+         pF0l = 0._RKIND
          DO a=1, eNoN
             Ac = lM%IEN(a,e)
             ptr(a)   = Ac

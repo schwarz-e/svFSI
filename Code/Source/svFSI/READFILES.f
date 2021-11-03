@@ -95,6 +95,7 @@
          cmmVarWall   = .FALSE.
          shlEq        = .FALSE.
          pstEq        = .FALSE.
+         pschEq        = .FALSE.
          sstEq        = .FALSE.
          ibFlag       = .FALSE.
          useVarWall   = .FALSE.
@@ -344,7 +345,7 @@
       INTEGER(KIND=IKIND) fid, iBc, iBf, iM, iFa, phys(4),
      2   propL(maxNProp,10), outPuts(maxOutput), nDOP(4)
       CHARACTER(LEN=stdL) ctmp
-      TYPE(listType), POINTER :: lPtr, lPBC, lPBF
+      TYPE(listType), POINTER :: lPtr, lPtr2, lPBC, lPBF
       TYPE(fileType) fTmp
 
       lEq%useTLS  = .FALSE.
@@ -529,16 +530,27 @@
       CASE ('struct')
          lEq%phys = phys_struct
 
-         propL(1,1) = solid_density
-         propL(2,1) = damping
-         propL(3,1) = elasticity_modulus
-         propL(4,1) = poisson_ratio
-         propL(5,1) = f_x
-         propL(6,1) = f_y
-         IF (nsd .EQ. 3) propL(7,1) = f_z
+
+         IF (useVarWall) THEN
+            propL(1,1) = solid_density
+            propL(2,1) = damping
+            propL(3,1) = f_x
+            propL(4,1) = f_y
+            IF (nsd .EQ. 3) propL(5,1) = f_z
+         ELSE
+            propL(1,1) = solid_density
+            propL(2,1) = damping
+            propL(3,1) = elasticity_modulus
+            propL(4,1) = poisson_ratio
+            propL(5,1) = f_x
+            propL(6,1) = f_y
+            IF (nsd .EQ. 3) propL(7,1) = f_z
+         END IF
+         
          CALL READDOMAIN(lEq, propL, list)
 
          lPtr => list%get(pstEq, "Prestress")
+         lPtr2=> list%get(pschEq, "Prestretch")
 
          IF (pstEq) THEN
             nDOP = (/4,2,0,0/)
@@ -546,6 +558,13 @@
             outPuts(2)  = out_stress
             outPuts(3)  = out_cauchy
             outPuts(4)  = out_strain
+         ELSE IF (pschEq) THEN
+            nDOP = (/5,2,0,0/)
+            outPuts(1)  = out_displacement
+            outPuts(2)  = out_stress
+            outPuts(3)  = out_cauchy
+            outPuts(4)  = out_strain
+            outPuts(5)  = out_defGrad
          ELSE
             nDOP = (/12,2,0,0/)
             outPuts(1)  = out_displacement
@@ -1107,7 +1126,8 @@
      2       lEq%dmn(iDmn)%phys.EQ.phys_ustruct) THEN
             CALL READMATMODEL(lEq%dmn(iDmn), lPD)
             IF (ISZERO(lEq%dmn(iDmn)%stM%Kpen) .AND.
-     2          lEq%dmn(iDmn)%phys .EQ. phys_struct) THEN
+     2          (lEq%dmn(iDmn)%phys .EQ. phys_struct) .AND. 
+     3          (.NOT. useVarWall)) THEN
 
                err = "Incompressible struct is not allowed. Use "//
      2            "penalty method or ustruct"
@@ -2474,6 +2494,9 @@ c     2         "can be applied for Neumann boundaries only"
          lDmn%stM%isoType = stIso_nHook
          lDmn%stM%C10 = mu*0.5_RKIND
 
+      CASE ("mm", "MM", "mixed-model")
+         lDmn%stM%isoType = stIso_MM
+
       CASE ("MR", "Mooney-Rivlin")
          lDmn%stM%isoType = stIso_MR
          lPtr => lSt%get(lDmn%stM%C10, "c1")
@@ -2516,9 +2539,10 @@ c     2         "can be applied for Neumann boundaries only"
          err = "Undefined constitutive model used"
       END SELECT
 
-      IF (useVarWall .AND. (lDmn%stM%isoType .NE. stIso_nHook)) THEN
+      IF (useVarWall .AND. .NOT. ((lDmn%stM%isoType .EQ. stIso_nHook)
+     2  .OR. (lDmn%stM%isoType .EQ. stIso_MM)) ) THEN
          err = "Variable wall properties currently only implemented "//
-     2         "for isotropic Neo-Hookean material in STRUCT."
+     2         "for isotropic Neo-Hookean and mixed material in STRUCT."
       END IF
       IF (useVarWall .AND. (nvwp .LT. 2._RKIND)) THEN
          err = "Number of variable wall properties for isotropic "//

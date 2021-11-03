@@ -59,10 +59,16 @@
 !     HGO/HO model
       REAL(KIND=RKIND) :: Eff, Ess, Efs, kap, Hff(nsd,nsd),
      4   Hss(nsd,nsd), Hfs(nsd,nsd)
+!     MM model
+      REAL(KIND=RKIND) :: CCi(nsd,nsd,nsd,nsd), rRa, rhah, vFa,
+     5   Si(nsd,nsd)
+      INTEGER(KIND=IKIND) :: i, nIso, nVars
+
 !     Active strain for electromechanics
       REAL(KIND=RKIND) :: Fe(nsd,nsd), Fa(nsd,nsd), Fai(nsd,nsd)
 
       S    = 0._RKIND
+      CC   = 0._RKIND
       Dm   = 0._RKIND
 
 !     Some preliminaries
@@ -127,6 +133,37 @@
          S  = g1*LOG(J)*Ci + g2*(C-IDm)
          CC = g1 * ( -2._RKIND*LOG(J)*TEN_SYMMPROD(Ci, Ci, nsd) +
      2      TEN_DYADPROD(Ci, Ci, nsd) ) + 2._RKIND*g2*TEN_IDs(nsd)
+
+!     MM (Mixture Model) model based on Ogden for anisotropic,
+!     NeoHookean for isotropic
+      CASE (stIso_MM)
+         IF (.NOT. useVarWall) err = "Need defined variable "//
+     2      "wall properties to use mixture model"
+
+!        Number of collagen constituents
+         nIso= 3
+         nVars= 7
+!         nAni= 3
+!         nAct= 1
+
+         DO i=1,nIso
+            g1 = eVWP(3+(i-1)*nVars)
+!           volR_alpha
+            vFa = eVWP(2+(i-1)*nVars)
+
+
+            Sb = g1*IDm
+            r1 = g1*Inv1/nd
+            Si  = J2d*Sb - r1*Ci
+            CCi = (-2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
+     2                      TEN_DYADPROD(Si, Ci, nsd))
+            Si  = Si + p*J*Ci
+            CCi = CCi + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2         + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+            S = S + vFa*Si
+            CC = CC + vFa*CCi
+         END DO
 
 !     NeoHookean model
       CASE (stIso_nHook)

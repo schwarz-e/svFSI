@@ -221,7 +221,7 @@
       END SUBROUTINE WRITERESTART
 !####################################################################
 !     Prints norm of the displacement in the solid domain when being
-!     solved for prestress
+!     solved for prestress or prestetch
       SUBROUTINE OUTDNORM()
       USE COMMOD
       USE ALLFUN

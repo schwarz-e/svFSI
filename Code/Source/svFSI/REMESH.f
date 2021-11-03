@@ -393,6 +393,9 @@
       IF (ALLOCATED(pS0))      DEALLOCATE(pS0)
       IF (ALLOCATED(pSn))      DEALLOCATE(pSn)
       IF (ALLOCATED(pSa))      DEALLOCATE(pSa)
+      IF (ALLOCATED(pF0))      DEALLOCATE(pF0)
+      IF (ALLOCATED(pFn))      DEALLOCATE(pFn)
+      IF (ALLOCATED(pFa))      DEALLOCATE(pFa)
 
 !     Varwall properties -----------------------------------------------
       IF (ALLOCATED(vWP0))      DEALLOCATE(vWP0)

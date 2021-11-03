@@ -186,6 +186,7 @@
          CALL cm%bcast(cmmVarWall)
          CALL cm%bcast(shlEq)
          CALL cm%bcast(pstEq)
+         CALL cm%bcast(pschEq)
 !        Varwall properties---------------------------------------------
          CALL cm%bcast(useVarWall)
          CALL cm%bcast(nvwp)
@@ -257,6 +258,22 @@
          END IF
          ALLOCATE(pS0(nsymd,tnNo))
          pS0 = LOCAL(tmpX)
+         DEALLOCATE(tmpX)
+      END IF
+
+!     Distribute prestretch (pF0) to processors
+      flag = ALLOCATED(pF0)
+      CALL cm%bcast(flag)
+      IF (flag) THEN
+         IF (cm%mas()) THEN
+            ALLOCATE(tmpX(nsd*nsd,gtnNo))
+            tmpX = pF0
+            DEALLOCATE(pF0)
+         ELSE
+            ALLOCATE(tmpX(0,0))
+         END IF
+         ALLOCATE(pF0(nsd*nsd,tnNo))
+         pF0 = LOCAL(tmpX)
          DEALLOCATE(tmpX)
       END IF
 
