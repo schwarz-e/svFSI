@@ -59,10 +59,15 @@
 !     HGO/HO model
       REAL(KIND=RKIND) :: Eff, Ess, Efs, kap, Hff(nsd,nsd),
      4   Hss(nsd,nsd), Hfs(nsd,nsd)
+!     MM model
+      REAL(KIND=RKIND) :: CCi(nsd,nsd,nsd,nsd), rRa, rhah, vFa,
+     5   Si(nsd,nsd), fdir(nsd), gan, lam0, lamm, vaff, vbff, fTact
+      INTEGER(KIND=IKIND) :: i, nIso, nVars, nAct, nAni
 !     Active strain for electromechanics
       REAL(KIND=RKIND) :: Fe(nsd,nsd), Fa(nsd,nsd), Fai(nsd,nsd)
 
       S    = 0._RKIND
+      CC   = 0._RKIND
       Dm   = 0._RKIND
 
 !     Some preliminaries
@@ -141,7 +146,7 @@
 !        Fiber reinforcement/active stress
          Sb = Sb + Tfa*MAT_DYADPROD(fl(:,1), fl(:,1), nsd)
 
-         r1 = g1*Inv1/nd
+         r1 = J2d*MAT_DDOT(C, Sb, nsd) / nd
          S  = J2d*Sb - r1*Ci
          CC = (-2._RKIND/nd) * ( TEN_DYADPROD(Ci, S, nsd) +
      2                      TEN_DYADPROD(S, Ci, nsd))
@@ -149,6 +154,7 @@
          S  = S + p*J*Ci
          CC = CC + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd) +
      2         (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+!         PRINT *, S(1,1)+S(2,2)+S(3,3)
 
 !     Mooney-Rivlin model
       CASE (stIso_MR)
@@ -224,6 +230,123 @@
          S   = S + p*J*Ci
          CC  = CC + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd) +
      2          (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+!     MM (Mixture Model) model based on Ogden for anisotropic,
+!     NeoHookean for isotropic
+      CASE (stIso_MM)
+         IF (.NOT. useVarWall) err = "Need defined variable "//
+     2      "wall properties to use mixture model"
+
+!        Number of collagen constituents
+         nVars= 7
+         nIso= 1
+         nAni= 0
+         nAct= 0
+
+         DO i=1,nIso
+!           volR_alpha
+            vFa = eVWP(1+(i-1)*nVars)
+            g1 = eVWP(5+(i-1)*nVars)
+
+
+            Sb = g1*IDm
+            r1 = J2d*MAT_DDOT(C, Sb, nsd) / nd
+            Si  = J2d*Sb - r1*Ci
+            CCi = (-2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
+     2                      TEN_DYADPROD(Si, Ci, nsd))
+            Si  = Si + p*J*Ci
+            CCi = CCi + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2         + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+            S = S + vFa*Si
+            CC = CC + vFa*CCi
+         END DO
+         DO i = 1,nAni
+            PRINT *, "Anisotropic"
+
+!           volR_alpha
+            vFa  = eVWP(1+(nIso + i-1)*nVars)
+            gan  = eVWP(2+(nIso + i-1)*nVars)
+            vaff = eVWP(3+(nIso + i - 1)*nVars)
+            vbff = eVWP(4+(nIso + i - 1)*nVars)
+            fdir = eVWP(5+(nIso + i - 1)*nVars:
+     2             7+(nIso + i - 1)*nVars)
+
+            Inv4 = J2d*NORM(fdir, MATMUL(C, fdir))
+
+            Eff  = Inv4*gan*gan - 1._RKIND
+
+            Hff  = MAT_DYADPROD(fdir, fdir, nsd)
+
+            g1   = vaff * Eff*gan*gan * EXP(vbff*Eff*Eff)
+            Sb   = 2._RKIND*(g1*Hff)
+
+            g1   = vaff*(1._RKIND + 2._RKIND*vbff*Eff*Eff) *
+     2         EXP(vbff*Eff*Eff) *gan*gan*gan*gan
+            g1   = 4._RKIND*J4d*g1
+
+            CCb  = g1 * TEN_DYADPROD(Hff, Hff, nsd)
+
+            r1  = J2d*MAT_DDOT(C, Sb, nsd) / nd
+            Si   = J2d*Sb - r1*Ci
+
+            PP  = TEN_IDs(nsd) - (1._RKIND/nd) *
+     2          TEN_DYADPROD(Ci, C, nsd)
+
+            CCi  = TEN_DDOT(CCb, PP, nsd)
+            CCi  = TEN_TRANSPOSE(CCi, nsd)
+            CCi  = TEN_DDOT(PP, CCi, nsd)
+            CCi  = CCi - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
+     2                           TEN_DYADPROD(Si, Ci, nsd) )
+
+            Si   = Si + p*J*Ci
+            CCi  = CCi + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2          + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+
+            S = S + vFa*Si
+            CC = CC + vFa*CCi
+
+         END DO
+         DO i = 1,nAct
+            PRINT *, "Active"
+
+            vFa   = eVWP(1+(nIso + nAct + i-1)*nVars)
+            fTact = eVWP(2+(nIso + nAct + i-1)*nVars)
+            lamm  = eVWP(3+(nIso + nAct + i-1)*nVars)
+            lam0  = eVWP(4+(nIso + nAct + i-1)*nVars)
+            fdir  = eVWP(5+(nIso + nAct + i - 1)*nVars:
+     2              7+(nIso + nAct + i - 1)*nVars)
+
+            Inv4 = J2d*NORM(fdir, MATMUL(C, fdir))
+            Hff  = MAT_DYADPROD(fdir, fdir, nsd)
+
+!           CMM fiber reinforcement/active stress
+            Sb  = fTact*(Inv4**-0.5)*MAT_DYADPROD(fdir, fdir, nsd)*(1 -
+     2               ((lamm - Inv4**0.5)/(lamm - lam0))**2)
+
+            r1  = J2d*MAT_DDOT(C, Sb, nsd) / nd
+            Si  = J2d*Sb - r1*Ci
+
+            PP  = TEN_IDs(nsd) - (1._RKIND/nd) *
+     2          TEN_DYADPROD(Ci, C, nsd)
+
+            CCi  = TEN_DDOT(CCb, PP, nsd)
+            CCi  = TEN_TRANSPOSE(CCi, nsd)
+            CCi  = TEN_DDOT(PP, CCi, nsd)
+            CCi  = CCi - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
+     2                           TEN_DYADPROD(Si, Ci, nsd) )
+
+            Si   = Si + p*J*Ci
+            CCi  = CCi + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2          + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+
+            S = S + vFa*Si
+            CC = CC + vFa*CCi
+
+         END DO
+!         PRINT *, S
 
 !     Guccione (1995) transversely isotropic model
       CASE (stIso_Gucci)
@@ -420,16 +543,21 @@
      2   Inv8, Tfa, IDm(nsd,nsd), C(nsd,nsd), E(nsd,nsd), Ci(nsd,nsd),
      3   Sb(nsd,nsd), CCb(nsd,nsd,nsd,nsd), PP(nsd,nsd,nsd,nsd),
      4   CC(nsd,nsd,nsd,nsd)
+      ! MM model !
+      REAL(KIND=RKIND) :: CCi(nsd,nsd,nsd,nsd), rRa, rhah, vFa,
+     5   Si(nsd,nsd)
       REAL(KIND=RKIND) :: r1, r2, g1, g2, g3
       ! Guccione !
       REAL(KIND=RKIND) :: QQ, Rm(nsd,nsd), Es(nsd,nsd), RmRm(nsd,nsd,6)
       ! HGO, HO !
       REAL(KIND=RKIND) :: kap, Eff, Ess, Efs, Hff(nsd,nsd),
      2   Hss(nsd,nsd), Hfs(nsd,nsd)
+      INTEGER(KIND=IKIND) :: i, nIso, nVars
 !     Active strain for electromechanics
       REAL(KIND=RKIND) :: Fe(nsd,nsd), Fa(nsd,nsd), Fai(nsd,nsd)
 
       S    = 0._RKIND
+      CC   = 0._RKIND
       Dm   = 0._RKIND
 
 !     Some preliminaries

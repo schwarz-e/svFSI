@@ -140,6 +140,7 @@
       PURE SUBROUTINE LELAS3D (eNoN, w, N, Nx, al, dl, bfl, pS0l, pSl,
      2   lR, lK, lVWP)
       USE COMMOD
+      USE MATFUN
       IMPLICIT NONE
       INTEGER(KIND=IKIND), INTENT(IN) :: eNoN
       REAL(KIND=RKIND), INTENT(IN) :: w, N(eNoN), Nx(3,eNoN),
@@ -150,7 +151,8 @@
 
       INTEGER(KIND=IKIND) a, b, i, j, k
       REAL(KIND=RKIND) NxdNx, rho, elM, nu, lambda, mu, divD, T1, amd,
-     2   wl, lDm, ed(6), ud(3), f(3), S0(6), S(6), eVWP(nvwp), Cst(6,6)
+     2   wl, lDm, ed(6), ud(3), f(3), S0(6), S(6), eVWP(nvwp), DD(6,6),
+     3   T2, BBaT(3,6), BBb(6,3), lKK(3,3), IdM(3,3)
 
       rho  = eq(cEq)%dmn(cDmn)%prop(solid_density)
       f(1) = eq(cEq)%dmn(cDmn)%prop(f_x)
@@ -164,6 +166,12 @@
       ud = -f
       S0 = 0._RKIND
       eVWP = 0._RKIND
+      BBaT = 0._RKIND
+      BBb = 0._RKIND
+      IdM = 0._RKIND
+      IdM(1,1) = 1._RKIND
+      IdM(2,2) = 1._RKIND
+      IdM(3,3) = 1._RKIND
 
       DO a=1, eNoN
          ud(1) = ud(1) + N(a)*(al(i,a)-bfl(1,a))
@@ -193,14 +201,14 @@
          S0(6) = S0(6) + N(a)*pS0l(6,a)
       END DO
 
-
-      IF (useVarWall .AND. (phys_mesh .NE. eq(cEq)%phys)) THEN
-         elM  = eVWP(1)
-         nu   = evWP(2)
-      ELSE
-         elM  = eq(cEq)%dmn(cDmn)%prop(elasticity_modulus)
-         nu   = eq(cEq)%dmn(cDmn)%prop(poisson_ratio)
-      END IF
+!      ADD FUNCTIONALITY FOR PURELY ISOTROPIC VARWALL
+!      IF (useVarWall .AND. (phys_mesh .NE. eq(cEq)%phys)) THEN
+!         elM  = eVWP(1)
+!         nu   = evWP(2)
+!      ELSE
+!         elM  = eq(cEq)%dmn(cDmn)%prop(elasticity_modulus)
+!         nu   = eq(cEq)%dmn(cDmn)%prop(poisson_ratio)
+!      END IF
       
       lambda = elM*nu / (1._RKIND+nu) / (1._RKIND-2._RKIND*nu)
       mu     = elM * 0.5_RKIND / (1._RKIND+nu)
@@ -211,14 +219,24 @@
 
       divD = lambda*(ed(1) + ed(2) + ed(3))
 
-
-!     Stress in Voigt notation
-      S(1) = divD + 2._RKIND*mu*ed(1)
-      S(2) = divD + 2._RKIND*mu*ed(2)
-      S(3) = divD + 2._RKIND*mu*ed(3)
-      S(4) = mu*ed(4)  ! 2*eps_12
-      S(5) = mu*ed(5)  ! 2*eps_23
-      S(6) = mu*ed(6)  ! 2*eps_13
+!     Calculate local wall property
+      IF (useVarWall .AND. (phys_mesh .NE. eq(cEq)%phys)) THEN
+         DD(1,:) = eVWP(1:6)
+         DD(2,:) = eVWP(7:12)
+         DD(3,:) = eVWP(13:18)
+         DD(4,:) = eVWP(19:24)
+         DD(5,:) = eVWP(25:30)
+         DD(6,:) = eVWP(31:36)
+         S(:) = MATMUL(DD,ed)
+      ELSE
+   !     Stress in Voigt notation
+         S(1) = divD + 2._RKIND*mu*ed(1)
+         S(2) = divD + 2._RKIND*mu*ed(2)
+         S(3) = divD + 2._RKIND*mu*ed(3)
+         S(4) = mu*ed(4)  ! 2*eps_12
+         S(5) = mu*ed(5)  ! 2*eps_23
+         S(6) = mu*ed(6)  ! 2*eps_13
+      END IF
 
       pSl  = S
 
@@ -235,37 +253,75 @@
          lR(3,a) = lR(3,a) + w*(rho*N(a)*ud(3) + Nx(1,a)*S(6) +
      2      Nx(2,a)*S(5) + Nx(3,a)*S(3))
 
+         BBaT(1,1)=Nx(1,a)
+         BBaT(2,2)=Nx(2,a)
+         BBaT(3,3)=Nx(3,a)
+         BBaT(1,4)=Nx(2,a)
+         BBaT(2,4)=Nx(1,a)
+         BBaT(1,5)=Nx(3,a)
+         BBaT(3,5)=Nx(1,a)
+         BBaT(2,6)=Nx(3,a)
+         BBaT(3,6)=Nx(2,a)
+
          DO b=1, eNoN
-            NxdNx = Nx(1,a)*Nx(1,b) + Nx(2,a)*Nx(2,b) + Nx(3,a)*Nx(3,b)
 
-            T1 = amd*N(a)*N(b)/mu + NxdNx
+            BBb(1,1)=Nx(1,b)
+            BBb(2,2)=Nx(2,b)
+            BBb(3,3)=Nx(3,b)
+            BBb(4,1)=Nx(2,b)
+            BBb(4,2)=Nx(1,b)
+            BBb(5,1)=Nx(3,b)
+            BBb(5,3)=Nx(1,b)
+            BBb(6,2)=Nx(3,b)
+            BBb(6,3)=Nx(2,b)
+            IF (useVarWall .AND. (phys_mesh .NE. eq(cEq)%phys)) THEN
 
-            lK(1,a,b) = lK(1,a,b) + wl*(T1
-     2         + (1._RKIND + lDm)*Nx(1,a)*Nx(1,b))
+               lKK = T1*(w*MATMUL(MATMUL(BBaT,DD),BBb)
+     2            + w*amd*N(a)*N(b)*IdM)
 
-            lK(2,a,b) = lK(2,a,b) + wl*(lDm*Nx(1,a)*Nx(2,b)
-     2         + Nx(2,a)*Nx(1,b))
+               lK(1,a,b) = lKK(1,1)
+               lK(2,a,b) = lKK(1,2)
+               lK(3,a,b) = lKK(1,3)
+               lK(dof+1,a,b) = lKK(2,1)
+               lK(dof+2,a,b) = lKK(2,2)
+               lK(dof+3,a,b) = lKK(2,3)
+               lK(2*dof+1,a,b) = lKK(3,1)
+               lK(2*dof+2,a,b) = lKK(3,2)
+               lK(2*dof+3,a,b) = lKK(3,3)
 
-            lK(3,a,b) = lK(3,a,b) + wl*(lDm*Nx(1,a)*Nx(3,b)
-     2         + Nx(3,a)*Nx(1,b))
+            ELSE
+               NxdNx = Nx(1,a)*Nx(1,b) + Nx(2,a)*Nx(2,b) 
+     2            + Nx(3,a)*Nx(3,b)
 
-            lK(dof+1,a,b) = lK(dof+1,a,b) + wl*(lDm*Nx(2,a)*Nx(1,b)
-     2         + Nx(1,a)*Nx(2,b))
+               T2 = amd*N(a)*N(b)/mu + NxdNx
 
-            lK(dof+2,a,b) = lK(dof+2,a,b) + wl*(T1
-     2         + (1._RKIND + lDm)*Nx(2,a)*Nx(2,b))
+               lK(1,a,b) = lK(1,a,b) + wl*(T2
+     2            + (1._RKIND + lDm)*Nx(1,a)*Nx(1,b))
 
-            lK(dof+3,a,b) = lK(dof+3,a,b) + wl*(lDm*Nx(2,a)*Nx(3,b)
-     2         + Nx(3,a)*Nx(2,b))
+               lK(2,a,b) = lK(2,a,b) + wl*(lDm*Nx(1,a)*Nx(2,b)
+     2            + Nx(2,a)*Nx(1,b))
 
-            lK(2*dof+1,a,b) = lK(2*dof+1,a,b) + wl*(lDm*Nx(3,a)*Nx(1,b)
-     2         + Nx(1,a)*Nx(3,b))
+               lK(3,a,b) = lK(3,a,b) + wl*(lDm*Nx(1,a)*Nx(3,b)
+     2            + Nx(3,a)*Nx(1,b))
 
-            lK(2*dof+2,a,b) = lK(2*dof+2,a,b) + wl*(lDm*Nx(3,a)*Nx(2,b)
-     2         + Nx(2,a)*Nx(3,b))
+               lK(dof+1,a,b) = lK(dof+1,a,b) + wl*(lDm*Nx(2,a)*Nx(1,b)
+     2            + Nx(1,a)*Nx(2,b))
 
-            lK(2*dof+3,a,b) = lK(2*dof+3,a,b) + wl*(T1
-     2         + (1._RKIND + lDm)*Nx(3,a)*Nx(3,b))
+               lK(dof+2,a,b) = lK(dof+2,a,b) + wl*(T2
+     2            + (1._RKIND + lDm)*Nx(2,a)*Nx(2,b))
+
+               lK(dof+3,a,b) = lK(dof+3,a,b) + wl*(lDm*Nx(2,a)*Nx(3,b)
+     2            + Nx(3,a)*Nx(2,b))
+
+               lK(2*dof+1,a,b) = lK(2*dof+1,a,b) 
+     2            + wl*(lDm*Nx(3,a)*Nx(1,b) + Nx(1,a)*Nx(3,b))
+
+               lK(2*dof+2,a,b) = lK(2*dof+2,a,b) 
+     2            + wl*(lDm*Nx(3,a)*Nx(2,b) + Nx(2,a)*Nx(3,b))
+
+               lK(2*dof+3,a,b) = lK(2*dof+3,a,b) + wl*(T2
+     2            + (1._RKIND + lDm)*Nx(3,a)*Nx(3,b))
+            END IF
          END DO
       END DO
 

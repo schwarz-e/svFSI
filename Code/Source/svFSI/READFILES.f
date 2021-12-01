@@ -483,9 +483,9 @@
       CASE ('lElas')
          lEq%phys = phys_lElas
 
-         IF (useVarWall .AND. (nvwp .LT. 2._RKIND)) THEN
+         IF (useVarWall .AND. (nvwp .LT. 36._RKIND)) THEN
             err = "Number of variable wall properties for linear "//
-     2         "elastic material must be at least 2."
+     2         "elastic material must be at least 36."
          END IF
 
          IF (useVarWall) THEN
@@ -529,13 +529,22 @@
       CASE ('struct')
          lEq%phys = phys_struct
 
-         propL(1,1) = solid_density
-         propL(2,1) = damping
-         propL(3,1) = elasticity_modulus
-         propL(4,1) = poisson_ratio
-         propL(5,1) = f_x
-         propL(6,1) = f_y
-         IF (nsd .EQ. 3) propL(7,1) = f_z
+         IF (useVarWall) THEN
+            propL(1,1) = solid_density
+            propL(2,1) = damping
+            propL(3,1) = f_x
+            propL(4,1) = f_y
+            IF (nsd .EQ. 3) propL(5,1) = f_z
+         ELSE
+            propL(1,1) = solid_density
+            propL(2,1) = damping
+            propL(3,1) = elasticity_modulus
+            propL(4,1) = poisson_ratio
+            propL(5,1) = f_x
+            propL(6,1) = f_y
+            IF (nsd .EQ. 3) propL(7,1) = f_z
+         END IF
+
          CALL READDOMAIN(lEq, propL, list)
 
          lPtr => list%get(pstEq, "Prestress")
@@ -751,14 +760,38 @@
          propL(4,1) = f_y
          IF (nsd .EQ. 3) propL(5,1) = f_z
 
-!        struct properties
-         propL(1,2) = solid_density
-         propL(2,2) = elasticity_modulus
-         propL(3,2) = poisson_ratio
-         propL(4,2) = damping
-         propL(5,2) = f_x
-         propL(6,2) = f_y
-         IF (nsd .EQ. 3) propL(7,2) = f_z
+         IF (useVarWall) THEN
+!           struct properties
+            propL(1,2) = solid_density
+            propL(2,2) = damping
+            propL(3,2) = f_x
+            propL(4,2) = f_y
+            IF (nsd .EQ. 3) propL(5,2) = f_z
+
+!           lElas properties
+            propL(1,4) = solid_density
+            propL(2,4) = f_x
+            propL(3,4) = f_y
+            IF (nsd .EQ. 3) propL(4,4) = f_z
+         ELSE
+!           struct properties
+            propL(1,2) = solid_density
+            propL(2,2) = elasticity_modulus
+            propL(3,2) = poisson_ratio
+            propL(4,2) = damping
+            propL(5,2) = f_x
+            propL(6,2) = f_y
+            IF (nsd .EQ. 3) propL(7,2) = f_z
+
+!           lElas properties
+            propL(1,4) = solid_density
+            propL(2,4) = elasticity_modulus
+            propL(3,4) = poisson_ratio
+            propL(4,4) = f_x
+            propL(5,4) = f_y
+            IF (nsd .EQ. 3) propL(6,4) = f_z
+         END IF
+
 
 !        ustruct properties
          propL(1,3) = solid_density
@@ -770,13 +803,6 @@
          propL(7,3) = f_y
          IF (nsd .EQ. 3) propL(8,3) = f_z
 
-!        lElas properties
-         propL(1,4) = solid_density
-         propL(2,4) = elasticity_modulus
-         propL(3,4) = poisson_ratio
-         propL(4,4) = f_x
-         propL(5,4) = f_y
-         IF (nsd .EQ. 3) propL(6,4) = f_z
 
          CALL READDOMAIN(lEq, propL, list, phys)
 
@@ -1107,7 +1133,8 @@
      2       lEq%dmn(iDmn)%phys.EQ.phys_ustruct) THEN
             CALL READMATMODEL(lEq%dmn(iDmn), lPD)
             IF (ISZERO(lEq%dmn(iDmn)%stM%Kpen) .AND.
-     2          lEq%dmn(iDmn)%phys .EQ. phys_struct) THEN
+     2          (lEq%dmn(iDmn)%phys .EQ. phys_struct) .AND. 
+     3          (.NOT. useVarWall)) THEN
 
                err = "Incompressible struct is not allowed. Use "//
      2            "penalty method or ustruct"
@@ -2474,6 +2501,9 @@ c     2         "can be applied for Neumann boundaries only"
          lDmn%stM%isoType = stIso_nHook
          lDmn%stM%C10 = mu*0.5_RKIND
 
+      CASE ("mm", "MM", "mixed-model")
+         lDmn%stM%isoType = stIso_MM
+
       CASE ("MR", "Mooney-Rivlin")
          lDmn%stM%isoType = stIso_MR
          lPtr => lSt%get(lDmn%stM%C10, "c1")
@@ -2516,9 +2546,10 @@ c     2         "can be applied for Neumann boundaries only"
          err = "Undefined constitutive model used"
       END SELECT
 
-      IF (useVarWall .AND. (lDmn%stM%isoType .NE. stIso_nHook)) THEN
+      IF (useVarWall .AND. .NOT. ((lDmn%stM%isoType .EQ. stIso_nHook)
+     2  .OR. (lDmn%stM%isoType .EQ. stIso_MM)) ) THEN
          err = "Variable wall properties currently only implemented "//
-     2         "for isotropic Neo-Hookean material in STRUCT."
+     2         "for isotropic Neo-Hookean and mixed material in STRUCT."
       END IF
       IF (useVarWall .AND. (nvwp .LT. 2._RKIND)) THEN
          err = "Number of variable wall properties for isotropic "//
