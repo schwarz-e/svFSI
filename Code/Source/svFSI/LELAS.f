@@ -201,14 +201,10 @@
          S0(6) = S0(6) + N(a)*pS0l(6,a)
       END DO
 
-!      ADD FUNCTIONALITY FOR PURELY ISOTROPIC VARWALL
-!      IF (useVarWall .AND. (phys_mesh .NE. eq(cEq)%phys)) THEN
-!         elM  = eVWP(1)
-!         nu   = evWP(2)
-!      ELSE
-!         elM  = eq(cEq)%dmn(cDmn)%prop(elasticity_modulus)
-!         nu   = eq(cEq)%dmn(cDmn)%prop(poisson_ratio)
-!      END IF
+      IF (.NOT. (useVarWall .AND. (phys_mesh .NE. eq(cEq)%phys))) THEN
+         elM  = eq(cEq)%dmn(cDmn)%prop(elasticity_modulus)
+         nu   = eq(cEq)%dmn(cDmn)%prop(poisson_ratio)
+      END IF
       
       lambda = elM*nu / (1._RKIND+nu) / (1._RKIND-2._RKIND*nu)
       mu     = elM * 0.5_RKIND / (1._RKIND+nu)
@@ -256,38 +252,44 @@
          BBaT(1,1)=Nx(1,a)
          BBaT(2,2)=Nx(2,a)
          BBaT(3,3)=Nx(3,a)
+
          BBaT(1,4)=Nx(2,a)
          BBaT(2,4)=Nx(1,a)
-         BBaT(1,5)=Nx(3,a)
-         BBaT(3,5)=Nx(1,a)
-         BBaT(2,6)=Nx(3,a)
-         BBaT(3,6)=Nx(2,a)
+
+         BBaT(2,5)=Nx(3,a)
+         BBaT(3,5)=Nx(2,a)
+
+         BBaT(1,6)=Nx(3,a)
+         BBaT(3,6)=Nx(1,a)
 
          DO b=1, eNoN
 
             BBb(1,1)=Nx(1,b)
             BBb(2,2)=Nx(2,b)
             BBb(3,3)=Nx(3,b)
+
             BBb(4,1)=Nx(2,b)
             BBb(4,2)=Nx(1,b)
-            BBb(5,1)=Nx(3,b)
-            BBb(5,3)=Nx(1,b)
-            BBb(6,2)=Nx(3,b)
-            BBb(6,3)=Nx(2,b)
+
+            BBb(5,2)=Nx(3,b)
+            BBb(5,3)=Nx(2,b)
+
+            BBb(6,1)=Nx(3,b)
+            BBb(6,3)=Nx(1,b)
             IF (useVarWall .AND. (phys_mesh .NE. eq(cEq)%phys)) THEN
 
                lKK = T1*(w*MATMUL(MATMUL(BBaT,DD),BBb)
      2            + w*amd*N(a)*N(b)*IdM)
 
-               lK(1,a,b) = lKK(1,1)
-               lK(2,a,b) = lKK(1,2)
-               lK(3,a,b) = lKK(1,3)
-               lK(dof+1,a,b) = lKK(2,1)
-               lK(dof+2,a,b) = lKK(2,2)
-               lK(dof+3,a,b) = lKK(2,3)
-               lK(2*dof+1,a,b) = lKK(3,1)
-               lK(2*dof+2,a,b) = lKK(3,2)
-               lK(2*dof+3,a,b) = lKK(3,3)
+               lK(1,a,b) = lK(1,a,b) + lKK(1,1)
+               lK(2,a,b) = lK(2,a,b) + lKK(1,2)
+               lK(3,a,b) = lK(3,a,b) + lKK(1,3)
+               lK(dof+1,a,b) = lK(dof+1,a,b) + lKK(2,1)
+               lK(dof+2,a,b) = lK(dof+2,a,b) + lKK(2,2)
+               lK(dof+3,a,b) = lK(dof+3,a,b) + lKK(2,3)
+               lK(2*dof+1,a,b) = lK(2*dof+1,a,b) + lKK(3,1)
+               lK(2*dof+2,a,b) = lK(2*dof+2,a,b) + lKK(3,2)
+               lK(2*dof+3,a,b) = lK(2*dof+3,a,b) +lKK(3,3)
 
             ELSE
                NxdNx = Nx(1,a)*Nx(1,b) + Nx(2,a)*Nx(2,b) 
