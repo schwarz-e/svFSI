@@ -144,6 +144,7 @@
          END IF
 #endif
       END DO ! e: loop
+      
 
       DEALLOCATE(ptr, xl, al, yl, dl, bfl, fN, pS0l, pSl, ya_l, N, Nx,
      2   lR, lK, lVWP)

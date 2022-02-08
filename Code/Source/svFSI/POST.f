@@ -522,7 +522,7 @@
      2   p, trS, vmises, xi(nsd), xi0(nsd), xp(nsd), ed(nsymd),
      3   Im(nsd,nsd), F(nsd,nsd), C(nsd,nsd), Eg(nsd,nsd), P1(nsd,nsd),
      4   S(nsd,nsd), sigma(nsd,nsd), Dm(nsymd,nsymd), eVWP(nvwp),
-     5   sigma_temp(6), Cst(6,6)
+     5   sigma_temp(6), DD(6,6), SDD(6)
       TYPE(fsType) :: fs
 
       INTEGER, ALLOCATABLE :: eNds(:)
@@ -560,6 +560,7 @@
      3   Nx(nsd,fs%eNoN), N(fs%eNoN), lVWP(nvwp,fs%eNoN))
 
       S    = 0._RKIND
+      SDD  = 0._RKIND
       sA   = 0._RKIND
       sF   = 0._RKIND
       sE   = 0._RKIND
@@ -642,10 +643,12 @@
                END IF
             END DO
             IF (cPhys .EQ. phys_lElas .AND. useVarWall) THEN
-               elM = eVWP(1)
-               nu  = eVWP(2)
-               lambda = elM*nu/(1._RKIND + nu)/(1._RKIND - 2._RKIND*nu)
-               mu     = 0.5_RKIND*elM/(1._RKIND + nu)
+               DD(1,:) = eVWP(1:6)
+               DD(2,:) = eVWP(7:12)
+               DD(3,:) = eVWP(13:18)
+               DD(4,:) = eVWP(19:24)
+               DD(5,:) = eVWP(25:30)
+               DD(6,:) = eVWP(31:36)
             END IF
             detF = MAT_DET(F, nsd)
 
@@ -716,25 +719,43 @@
 
             CASE (outGrp_stress, outGrp_cauchy, outGrp_mises)
                IF (cPhys .EQ. phys_lElas) THEN
-                  IF (nsd .EQ. 3) THEN
-                     detF = lambda*(ed(1) + ed(2) + ed(3))
-                     sigma(1,1) = detF + 2._RKIND*mu*ed(1)
-                     sigma(2,2) = detF + 2._RKIND*mu*ed(2)
-                     sigma(3,3) = detF + 2._RKIND*mu*ed(3)
+                  IF (useVarWall) THEN
+                     SDD(:) = MATMUL(DD,ed)
+                     sigma(1,1) = SDD(1)
 
-                     sigma(1,2) = mu*ed(4)
-                     sigma(2,3) = mu*ed(5)
-                     sigma(3,1) = mu*ed(6)
+                     sigma(2,2) = SDD(2)
+                     
+                     sigma(3,3) = SDD(3)
 
-                     sigma(2,1) = sigma(1,2)
-                     sigma(3,2) = sigma(2,3)
-                     sigma(1,3) = sigma(3,1)
+                     sigma(1,2) = SDD(4)
+                     sigma(2,1) = SDD(4)
+
+                     sigma(3,2) = SDD(5)
+                     sigma(2,3) = SDD(5)
+
+                     sigma(3,1) = SDD(6)
+                     sigma(1,3) = SDD(6)
                   ELSE
-                     detF = lambda*(ed(1) + ed(2))
-                     sigma(1,1) = detF + 2._RKIND*mu*ed(1)
-                     sigma(2,2) = detF + 2._RKIND*mu*ed(2)
-                     sigma(1,2) = mu*ed(3)
-                     sigma(2,1) = sigma(1,2)
+                     IF (nsd .EQ. 3) THEN
+                        detF = lambda*(ed(1) + ed(2) + ed(3))
+                        sigma(1,1) = detF + 2._RKIND*mu*ed(1)
+                        sigma(2,2) = detF + 2._RKIND*mu*ed(2)
+                        sigma(3,3) = detF + 2._RKIND*mu*ed(3)
+
+                        sigma(1,2) = mu*ed(4)
+                        sigma(2,3) = mu*ed(5)
+                        sigma(3,1) = mu*ed(6)
+
+                        sigma(2,1) = sigma(1,2)
+                        sigma(3,2) = sigma(2,3)
+                        sigma(1,3) = sigma(3,1)
+                     ELSE
+                        detF = lambda*(ed(1) + ed(2))
+                        sigma(1,1) = detF + 2._RKIND*mu*ed(1)
+                        sigma(2,2) = detF + 2._RKIND*mu*ed(2)
+                        sigma(1,2) = mu*ed(3)
+                        sigma(2,1) = sigma(1,2)
+                     END IF
                   END IF
 
                ELSE IF (cPhys .EQ. phys_ustruct) THEN

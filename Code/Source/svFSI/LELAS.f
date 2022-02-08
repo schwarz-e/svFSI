@@ -249,6 +249,7 @@
          lR(3,a) = lR(3,a) + w*(rho*N(a)*ud(3) + Nx(1,a)*S(6) +
      2      Nx(2,a)*S(5) + Nx(3,a)*S(3))
 
+
          BBaT(1,1)=Nx(1,a)
          BBaT(2,2)=Nx(2,a)
          BBaT(3,3)=Nx(3,a)

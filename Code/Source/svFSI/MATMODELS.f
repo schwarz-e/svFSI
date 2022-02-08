@@ -62,13 +62,20 @@
 !     MM model
       REAL(KIND=RKIND) :: CCi(nsd,nsd,nsd,nsd), rRa, rhah, vFa,
      5   Si(nsd,nsd), fdir(nsd), gan, lam0, lamm, vaff, vbff, fTact
+!     Aniso model
+      REAL(KIND=RKIND) :: Evgt(6), Sbvgt(6), DD(6,6)
       INTEGER(KIND=IKIND) :: i, nIso, nVars, nAct, nAni
 !     Active strain for electromechanics
       REAL(KIND=RKIND) :: Fe(nsd,nsd), Fa(nsd,nsd), Fai(nsd,nsd)
+      REAL(KIND=RKIND) :: p1,p2,p3,Q(nsd,nsd),Cps(nsd,nsd)
+      REAL(KIND=RKIND) :: f1(nsd),f2(nsd),f3(nsd)
 
       S    = 0._RKIND
       CC   = 0._RKIND
       Dm   = 0._RKIND
+      Cps  = 0._RKIND
+      Evgt = 0._RKIND
+      Sbvgt= 0._RKIND
 
 !     Some preliminaries
       stM  = lDmn%stM
@@ -116,6 +123,7 @@
          S  = g1*Idm
          RETURN
 
+
 !     St.Venant-Kirchhoff
       CASE (stIso_stVK)
          g1 = stM%C10            ! lambda
@@ -123,6 +131,62 @@
 
          S  = g1*trE*IDm + g2*E
          CC = g1*TEN_DYADPROD(IDm, IDm, nsd) + g2*TEN_IDs(nsd)
+
+!     Anisotropic linear (Full St. Venant-Kirchhoff)
+      CASE (stIso_aniso)
+         DD(1,:) = eVWP(1:6)
+         DD(2,:) = eVWP(7:12)
+         DD(3,:) = eVWP(13:18)
+         DD(4,:) = eVWP(19:24)
+         DD(5,:) = eVWP(25:30)
+         DD(6,:) = eVWP(31:36)
+
+         CALL VOIGTTOCC(CCb, DD)
+         Sb = TEN_MDDOT(CCb, E, nsd)
+
+         r1  = J2d*MAT_DDOT(C, Sb, nsd) / nd
+         S   = J2d*Sb - r1*Ci
+
+         PP  = TEN_IDs(nsd) - (1._RKIND/nd) * TEN_DYADPROD(Ci, C, nsd)
+         CC  = TEN_DDOT(CCb, PP, nsd)
+         CC  = TEN_TRANSPOSE(CC, nsd)
+         CC  = TEN_DDOT(PP, CC, nsd)
+         CC  = CC - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, S, nsd) +
+     2                           TEN_DYADPROD(S, Ci, nsd) )
+
+         S   = S + p*J*Ci
+         CC  = CC + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd) +
+     2          (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+
+
+!     Mooney-Rivlin model
+      CASE (stIso_MR)
+         g1  = 2._RKIND * (stM%C10 + Inv1*stM%C01)
+         g2  = -2._RKIND * stM%C01
+         Sb  = g1*IDm + g2*J2d*C
+
+!        Fiber reinforcement/active stress
+         Sb  = Sb + Tfa*MAT_DYADPROD(fl(:,1), fl(:,1), nsd)
+
+         g1  = 4._RKIND*J4d* stM%C01
+         CCb = g1 * (TEN_DYADPROD(IDm, IDm, nsd) - TEN_IDs(nsd))
+
+         r1  = J2d*MAT_DDOT(C, Sb, nsd) / nd
+         S   = J2d*Sb - r1*Ci
+
+         PP  = TEN_IDs(nsd) - (1._RKIND/nd) * TEN_DYADPROD(Ci, C, nsd)
+         CC  = TEN_DDOT(CCb, PP, nsd)
+         CC  = TEN_TRANSPOSE(CC, nsd)
+         CC  = TEN_DDOT(PP, CC, nsd)
+         CC  = CC - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, S, nsd) +
+     2                           TEN_DYADPROD(S, Ci, nsd) )
+
+         S   = S + p*J*Ci
+         CC  = CC + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd) +
+     2          (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+
 
 !     modified St.Venant-Kirchhoff
       CASE (stIso_mStVK)
@@ -154,33 +218,8 @@
          S  = S + p*J*Ci
          CC = CC + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd) +
      2         (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
-!         PRINT *, S(1,1)+S(2,2)+S(3,3)
 
-!     Mooney-Rivlin model
-      CASE (stIso_MR)
-         g1  = 2._RKIND * (stM%C10 + Inv1*stM%C01)
-         g2  = -2._RKIND * stM%C01
-         Sb  = g1*IDm + g2*J2d*C
 
-!        Fiber reinforcement/active stress
-         Sb  = Sb + Tfa*MAT_DYADPROD(fl(:,1), fl(:,1), nsd)
-
-         g1  = 4._RKIND*J4d* stM%C01
-         CCb = g1 * (TEN_DYADPROD(IDm, IDm, nsd) - TEN_IDs(nsd))
-
-         r1  = J2d*MAT_DDOT(C, Sb, nsd) / nd
-         S   = J2d*Sb - r1*Ci
-
-         PP  = TEN_IDs(nsd) - (1._RKIND/nd) * TEN_DYADPROD(Ci, C, nsd)
-         CC  = TEN_DDOT(CCb, PP, nsd)
-         CC  = TEN_TRANSPOSE(CC, nsd)
-         CC  = TEN_DDOT(PP, CC, nsd)
-         CC  = CC - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, S, nsd) +
-     2                           TEN_DYADPROD(S, Ci, nsd) )
-
-         S   = S + p*J*Ci
-         CC  = CC + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd) +
-     2          (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
 
 !     HGO (Holzapfel-Gasser-Ogden) model with additive splitting of
 !     the anisotropic fiber-based strain-energy terms
@@ -193,6 +232,7 @@
 
          Eff  = kap*Inv1 + (1._RKIND-3._RKIND*kap)*Inv4 - 1._RKIND
          Ess  = kap*Inv1 + (1._RKIND-3._RKIND*kap)*Inv6 - 1._RKIND
+
 
          Hff  = MAT_DYADPROD(fl(:,1), fl(:,1), nsd)
          Hff  = kap*IDm + (1._RKIND-3._RKIND*kap)*Hff
@@ -238,20 +278,41 @@
      2      "wall properties to use mixture model"
 
 !        Number of collagen constituents
-         nVars= 7
+         nVars= 14
          nIso= 1
-         nAni= 0
+         nAni= 5
          nAct= 0
 
          DO i=1,nIso
 !           volR_alpha
             vFa = eVWP(1+(i-1)*nVars)
+            p1 = eVWP(2+(i-1)*nVars)
+            p2 = eVWP(3+(i-1)*nVars)
+            p3 = eVWP(4+(i-1)*nVars)
             g1 = eVWP(5+(i-1)*nVars)
 
+            f1 = eVWP(6+(i-1)*nVars:8+(i-1)*nVars)
+            f2 = eVWP(9+(i-1)*nVars:11+(i-1)*nVars)
+            f3 = eVWP(12+(i-1)*nVars:14+(i-1)*nVars)
 
-            Sb = g1*IDm
+            Q(1,1:3) = f1
+            Q(2,1:3) = f2
+            Q(3,1:3) = f3
+
+            Cps(1,1) = p1*p1
+            Cps(2,2) = p2*p2
+            Cps(3,3) = p3*p3
+
+            Cps = MATMUL(Q,MATMUL(Cps,TRANSPOSE(Q)))
+
+            Sb = g1*Idm
             r1 = J2d*MAT_DDOT(C, Sb, nsd) / nd
             Si  = J2d*Sb - r1*Ci
+            
+            !Sb = g1*IDm
+            !r1 = J2d*MAT_DDOT(C, Sb, nsd) / nd
+            !Si  = J2d*Sb - r1*Ci
+
             CCi = (-2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
      2                      TEN_DYADPROD(Si, Ci, nsd))
             Si  = Si + p*J*Ci
@@ -261,8 +322,8 @@
             S = S + vFa*Si
             CC = CC + vFa*CCi
          END DO
+
          DO i = 1,nAni
-            PRINT *, "Anisotropic"
 
 !           volR_alpha
             vFa  = eVWP(1+(nIso + i-1)*nVars)
@@ -279,6 +340,7 @@
             Hff  = MAT_DYADPROD(fdir, fdir, nsd)
 
             g1   = vaff * Eff*gan*gan * EXP(vbff*Eff*Eff)
+
             Sb   = 2._RKIND*(g1*Hff)
 
             g1   = vaff*(1._RKIND + 2._RKIND*vbff*Eff*Eff) *
@@ -309,7 +371,6 @@
 
          END DO
          DO i = 1,nAct
-            PRINT *, "Active"
 
             vFa   = eVWP(1+(nIso + nAct + i-1)*nVars)
             fTact = eVWP(2+(nIso + nAct + i-1)*nVars)
@@ -346,7 +407,6 @@
             CC = CC + vFa*CCi
 
          END DO
-!         PRINT *, S
 
 !     Guccione (1995) transversely isotropic model
       CASE (stIso_Gucci)
@@ -976,6 +1036,42 @@
 
       RETURN
       END SUBROUTINE CCTOVOIGT
+
+!####################################################################
+!     Convert elasticity tensor to Voigt notation
+      SUBROUTINE VOIGTTOCC(CC, Dm)
+      USE COMMOD, ONLY : RKIND, IKIND, nsd, nsymd
+      IMPLICIT NONE
+      REAL(KIND=RKIND), INTENT(INOUT) :: CC(nsd,nsd,nsd,nsd)
+      REAL(KIND=RKIND), INTENT(IN) :: Dm(nsymd,nsymd)
+      INTEGER(KIND=IKIND) VgtMap(3,3)
+      INTEGER i, j, k, l, p, q
+
+      VgtMap = RESHAPE((/ 1, 4, 6, 4, 2, 5, 6, 5, 3/), SHAPE(VgtMap))
+
+
+      IF (nsd .EQ. 3) THEN
+
+         DO i = 1,3
+            DO j = 1,3
+               DO k = 1,3
+                  DO l = 1,3
+                     p = VgtMap(i,j)
+                     q = VgtMap(k,l)
+                     CC(i,j,k,l) = Dm(p, q)
+                  END DO
+               END DO
+            END DO 
+         END DO
+
+      END IF
+
+!     TODO: Add for 2D
+
+      RETURN
+      END SUBROUTINE VOIGTTOCC
+
+
 !####################################################################
 !     Compute additional fiber-reinforcement stress
       SUBROUTINE GETFIBSTRESS(Tfl, g)

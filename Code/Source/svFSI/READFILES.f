@@ -511,7 +511,7 @@
             outPuts(2)  = out_stress
             outPuts(3)  = out_strain
          ELSE
-            nDOP = (/9,2,0,0/)
+            nDOP = (/10,2,0,0/)
             outPuts(1) = out_displacement
             outPuts(2) = out_mises
             outPuts(3) = out_stress
@@ -521,6 +521,7 @@
             outPuts(7) = out_integ
             outPuts(8) = out_jacobian
             outPuts(9) = out_cauchy
+            outPuts(10)  = out_defGrad
          END IF
 
          CALL READLS(lSolver_CG, lEq, list)
@@ -2504,6 +2505,9 @@ c     2         "can be applied for Neumann boundaries only"
       CASE ("mm", "MM", "mixed-model")
          lDmn%stM%isoType = stIso_MM
 
+      CASE ("aniso", "Aniso", "anisotropic", "Anisotropic")
+         lDmn%stM%isoType = stIso_aniso
+
       CASE ("MR", "Mooney-Rivlin")
          lDmn%stM%isoType = stIso_MR
          lPtr => lSt%get(lDmn%stM%C10, "c1")
@@ -2547,9 +2551,10 @@ c     2         "can be applied for Neumann boundaries only"
       END SELECT
 
       IF (useVarWall .AND. .NOT. ((lDmn%stM%isoType .EQ. stIso_nHook)
-     2  .OR. (lDmn%stM%isoType .EQ. stIso_MM)) ) THEN
-         err = "Variable wall properties currently only implemented "//
-     2         "for isotropic Neo-Hookean and mixed material in STRUCT."
+     2  .OR. (lDmn%stM%isoType .EQ. stIso_MM)
+     3   .OR. (lDmn%stM%isoType .EQ. stIso_aniso)) ) THEN
+         err = "Variable wall properties not implemented "//
+     2         "for selected material model."
       END IF
       IF (useVarWall .AND. (nvwp .LT. 2._RKIND)) THEN
          err = "Number of variable wall properties for isotropic "//
