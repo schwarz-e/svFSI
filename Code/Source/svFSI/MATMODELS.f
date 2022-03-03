@@ -64,16 +64,18 @@
      5   Si(nsd,nsd), fdir(nsd), gan, lam0, lamm, vaff, vbff, fTact
 !     Aniso model
       REAL(KIND=RKIND) :: Evgt(6), Sbvgt(6), DD(6,6)
+!     Variable penalty
+      REAL(KIND=RKIND) :: dV
       INTEGER(KIND=IKIND) :: i, nIso, nVars, nAct, nAni
 !     Active strain for electromechanics
       REAL(KIND=RKIND) :: Fe(nsd,nsd), Fa(nsd,nsd), Fai(nsd,nsd)
-      REAL(KIND=RKIND) :: p1,p2,p3,Q(nsd,nsd),Cps(nsd,nsd)
+      REAL(KIND=RKIND) :: p1,p2,p3,Q(nsd,nsd),Fps(nsd,nsd)
       REAL(KIND=RKIND) :: f1(nsd),f2(nsd),f3(nsd)
 
       S    = 0._RKIND
       CC   = 0._RKIND
       Dm   = 0._RKIND
-      Cps  = 0._RKIND
+      Fps  = 0._RKIND
       Evgt = 0._RKIND
       Sbvgt= 0._RKIND
 
@@ -114,7 +116,14 @@
 !     Contribution of dilational penalty terms to S and CC
       p  = 0._RKIND
       pl = 0._RKIND
-      IF (.NOT.ISZERO(Kp)) CALL GETSVOLP(stM, J, p, pl)
+
+      IF (useVarWall .AND. (stM%volType .EQ. stVol_Var)) THEN
+         dV = eVWP(SIZE(evWP))
+      ELSE
+         dV = 1._RKIND
+      END IF
+
+      IF (.NOT.ISZERO(Kp)) CALL GETSVOLP(stM, J, p, pl, dV)
 
 !     Now, compute isochoric and total stress, elasticity tensors
       SELECT CASE (stM%isoType)
@@ -142,6 +151,8 @@
          DD(6,:) = eVWP(31:36)
 
          CALL VOIGTTOCC(CCb, DD)
+!        Compute isochoric component of E
+         E = 0.5_RKIND * (J2d*C - Idm)
          Sb = TEN_MDDOT(CCb, E, nsd)
 
          r1  = J2d*MAT_DDOT(C, Sb, nsd) / nd
@@ -299,28 +310,28 @@
             Q(2,1:3) = f2
             Q(3,1:3) = f3
 
-            Cps(1,1) = p1*p1
-            Cps(2,2) = p2*p2
-            Cps(3,3) = p3*p3
+            Fps(1,1) = p1
+            Fps(2,2) = p2
+            Fps(3,3) = p3
 
-            Cps = MATMUL(Q,MATMUL(Cps,TRANSPOSE(Q)))
+            Fps = MATMUL(Q,MATMUL(Fps,TRANSPOSE(Q)))
 
-            Sb = g1*Idm
+            Sb = g1*MATMUL(Fps,TRANSPOSE(Fps))
+
             r1 = J2d*MAT_DDOT(C, Sb, nsd) / nd
             Si  = J2d*Sb - r1*Ci
-            
-            !Sb = g1*IDm
-            !r1 = J2d*MAT_DDOT(C, Sb, nsd) / nd
-            !Si  = J2d*Sb - r1*Ci
 
-            CCi = (-2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
-     2                      TEN_DYADPROD(Si, Ci, nsd))
-            Si  = Si + p*J*Ci
-            CCi = CCi + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
-     2         + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+            CCi  = - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
+     2                           TEN_DYADPROD(Si, Ci, nsd) )
+
+            Si   = Si + p*J*Ci
+            CCi  = CCi + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2          + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
 
             S = S + vFa*Si
             CC = CC + vFa*CCi
+
          END DO
 
          DO i = 1,nAni
@@ -560,17 +571,22 @@
       RETURN
       END SUBROUTINE GETPK2CC
 !--------------------------------------------------------------------
-      SUBROUTINE GETSVOLP(stM, J, p, pl)
+      SUBROUTINE GETSVOLP(stM, J, p, pl, dV)
       USE COMMOD
       IMPLICIT NONE
       TYPE(stModelType), INTENT(IN) :: stM
-      REAL(KIND=RKIND), INTENT(IN) :: J
+      REAL(KIND=RKIND), INTENT(IN) :: J, dV
       REAL(KIND=RKIND), INTENT(INOUT) :: p, pl
 
       REAL(KIND=RKIND) Kp
 
+!     pl = p + dp/dJ
       Kp = stM%Kpen
       SELECT CASE (stM%volType)
+      CASE (stVol_Var)
+         p  = Kp*(J-dV)
+         pl = Kp*(2._RKIND*J-dV)
+
       CASE (stVol_Quad)
          p  = Kp*(J-1._RKIND)
          pl = Kp*(2._RKIND*J-1._RKIND)
@@ -992,46 +1008,54 @@
          Dm(1,5) = CC(1,1,2,3)
          Dm(1,6) = CC(1,1,3,1)
 
+         Dm(2,1) = CC(2,2,1,1)
          Dm(2,2) = CC(2,2,2,2)
          Dm(2,3) = CC(2,2,3,3)
          Dm(2,4) = CC(2,2,1,2)
          Dm(2,5) = CC(2,2,2,3)
          Dm(2,6) = CC(2,2,3,1)
 
+         Dm(3,1) = CC(3,3,1,1)
+         Dm(3,2) = CC(3,3,2,2)
          Dm(3,3) = CC(3,3,3,3)
          Dm(3,4) = CC(3,3,1,2)
          Dm(3,5) = CC(3,3,2,3)
          Dm(3,6) = CC(3,3,3,1)
-
+         
+         Dm(4,1) = CC(1,2,1,1)
+         Dm(4,2) = CC(1,2,2,2)
+         Dm(4,3) = CC(1,2,3,3)
          Dm(4,4) = CC(1,2,1,2)
          Dm(4,5) = CC(1,2,2,3)
          Dm(4,6) = CC(1,2,3,1)
 
+         Dm(5,1) = CC(2,3,1,1)
+         Dm(5,2) = CC(2,3,2,2)
+         Dm(5,3) = CC(2,3,3,3)
+         Dm(5,4) = CC(2,3,1,2)
          Dm(5,5) = CC(2,3,2,3)
          Dm(5,6) = CC(2,3,3,1)
-
+         
+         Dm(6,1) = CC(3,1,1,1)
+         Dm(6,2) = CC(3,1,2,2)
+         Dm(6,3) = CC(3,1,3,3)
+         Dm(6,4) = CC(3,1,1,2)
+         Dm(6,5) = CC(3,1,2,3)
          Dm(6,6) = CC(3,1,3,1)
-
-         DO i=2, 6
-            DO j=1, i-1
-               Dm(i,j) = Dm(j,i)
-            END DO
-         END DO
 
       ELSE IF (nsd .EQ. 2) THEN
          Dm(1,1) = CC(1,1,1,1)
          Dm(1,2) = CC(1,1,2,2)
          Dm(1,3) = CC(1,1,1,2)
 
+         Dm(2,1) = CC(2,2,1,1)
          Dm(2,2) = CC(2,2,2,2)
          Dm(2,3) = CC(2,2,1,2)
 
+         Dm(3,1) = CC(1,2,1,1)
+         Dm(3,2) = CC(1,2,2,2)
          Dm(3,3) = CC(1,2,1,2)
-
-         Dm(2,1) = Dm(1,2)
-         Dm(3,1) = Dm(1,3)
-         Dm(3,2) = Dm(2,3)
-
+         
       END IF
 
       RETURN
@@ -1047,7 +1071,9 @@
       INTEGER(KIND=IKIND) VgtMap(3,3)
       INTEGER i, j, k, l, p, q
 
-      VgtMap = RESHAPE((/ 1, 4, 6, 4, 2, 5, 6, 5, 3/), SHAPE(VgtMap))
+      VgtMap = RESHAPE((/ 1, 4, 6, 
+                          4, 2, 5,
+                          6, 5, 3/), SHAPE(VgtMap))
 
 
       IF (nsd .EQ. 3) THEN

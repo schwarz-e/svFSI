@@ -2611,9 +2611,16 @@ c     2         "can be applied for Neumann boundaries only"
       CASE ("M94", "Miehe94")
          lDmn%stM%volType = stVol_M94
 
+      CASE ("variable", "Variable", "var", "Var")
+         lDmn%stM%volType = stVol_Var
+
       CASE DEFAULT
          lDmn%stM%volType = stVol_ST91
       END SELECT
+
+      IF (.NOT. useVarWall .AND. (lDmn%stM%volType .EQ. stVol_Var)) THEN
+         err = "Variable volume penalty only available with varWall."
+      END IF
 
 !     Default penalty parameter is equal to bulk modulus
       lDmn%stM%Kpen = kap

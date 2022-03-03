@@ -188,7 +188,8 @@
 !     Type of constitutive model (volumetric) for structure eqn:
 !     Quadratic, Simo-Taylor91, Miehe94
       INTEGER(KIND=IKIND), PARAMETER :: stVol_NA = 650,
-     2   stVol_Quad = 651, stVol_ST91 = 652, stVol_M94 = 653
+     2   stVol_Quad = 651, stVol_ST91 = 652, stVol_M94 = 653,
+     3   stVol_Var = 654
 !--------------------------------------------------------------------
 !     Type of fluid viscosity: constant, Carreau-Yasuda shear-thinning
 !     model, Cassons non-Newtonian model
