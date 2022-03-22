@@ -65,7 +65,7 @@
 !     Aniso model
       REAL(KIND=RKIND) :: Evgt(6), Sbvgt(6), DD(6,6)
 !     Variable penalty
-      REAL(KIND=RKIND) :: dV
+      REAL(KIND=RKIND) :: dV,dV2d
       INTEGER(KIND=IKIND) :: i, nIso, nVars, nAct, nAni
 !     Active strain for electromechanics
       REAL(KIND=RKIND) :: Fe(nsd,nsd), Fa(nsd,nsd), Fai(nsd,nsd)
@@ -83,6 +83,13 @@
       stM  = lDmn%stM
       nd   = REAL(nsd, KIND=RKIND)
       Kp   = stM%Kpen
+
+
+      IF (useVarWall .AND. (stM%volType .EQ. stVol_Var)) THEN
+         dV = eVWP(SIZE(evWP))
+      ELSE
+         dV = 1._RKIND
+      END IF
 
 !     Fiber-reinforced stress
       CALL GETFIBSTRESS(stM%Tf, Tfa)
@@ -104,6 +111,9 @@
       J2d  = J**(-2._RKIND/nd)
       J4d  = J2d*J2d
 
+
+      dV2d  = dV**(-2._RKIND/nd)
+
       IDm  = MAT_ID(nsd)
       C    = MATMUL(TRANSPOSE(Fe), Fe)
       E    = 0.5_RKIND * (C - IDm)
@@ -117,11 +127,6 @@
       p  = 0._RKIND
       pl = 0._RKIND
 
-      IF (useVarWall .AND. (stM%volType .EQ. stVol_Var)) THEN
-         dV = eVWP(SIZE(evWP))
-      ELSE
-         dV = 1._RKIND
-      END IF
 
       IF (.NOT.ISZERO(Kp)) CALL GETSVOLP(stM, J, p, pl, dV)
 
@@ -152,11 +157,11 @@
 
          CALL VOIGTTOCC(CCb, DD)
 !        Compute isochoric component of E
-         E = 0.5_RKIND * (J2d*C - Idm)
+         E = 0.5_RKIND * ((J2d/dV2d)*C - Idm)
          Sb = TEN_MDDOT(CCb, E, nsd)
 
-         r1  = J2d*MAT_DDOT(C, Sb, nsd) / nd
-         S   = J2d*Sb - r1*Ci
+         r1  = (J2d/dV2d)*MAT_DDOT(C, Sb, nsd) / nd
+         S   = (J2d/dV2d)*Sb - r1*Ci
 
          PP  = TEN_IDs(nsd) - (1._RKIND/nd) * TEN_DYADPROD(Ci, C, nsd)
          CC  = TEN_DDOT(CCb, PP, nsd)
@@ -343,6 +348,8 @@
             vbff = eVWP(4+(nIso + i - 1)*nVars)
             fdir = eVWP(5+(nIso + i - 1)*nVars:
      2             7+(nIso + i - 1)*nVars)
+
+            vaff = vaff/2._RKIND
 
             Inv4 = J2d*NORM(fdir, MATMUL(C, fdir))
 
@@ -1071,9 +1078,7 @@
       INTEGER(KIND=IKIND) VgtMap(3,3)
       INTEGER i, j, k, l, p, q
 
-      VgtMap = RESHAPE((/ 1, 4, 6, 
-                          4, 2, 5,
-                          6, 5, 3/), SHAPE(VgtMap))
+      VgtMap = RESHAPE((/ 1, 4, 6, 4, 2, 5, 6, 5, 3/), SHAPE(VgtMap))
 
 
       IF (nsd .EQ. 3) THEN
