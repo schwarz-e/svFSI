@@ -123,7 +123,7 @@
                   END DO
                ELSE
                   DO a=1, msh(iM)%fa(iFa)%nNo
-                     AC = msh(iM)%fa(iFa)%gN(a)
+                     Ac = msh(iM)%fa(iFa)%gN(a)
                      lA(s:e,Ac) = tmpA(:,a)
                      lY(s:e,Ac) = tmpY(:,a)
                   END DO
