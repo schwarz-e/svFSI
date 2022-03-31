@@ -165,7 +165,7 @@
       LOGICAL flag
       INTEGER(KIND=IKIND) a, b, e, g, i, Ac, Bc, Ec
       REAL(KIND=RKIND) area, sln, nV(nsd), enV(nsd), v(nsd),
-     2                 xXi(nsd,nsd-1)
+     2                 xXi(nsd,nsd-1), cP(nsd)
       TYPE(fsType) :: fs
 
       LOGICAL, ALLOCATABLE :: setIt(:)
@@ -182,6 +182,14 @@
       END IF
       lFa%area = area
       DEALLOCATE(sA)
+
+!     Calculating face center
+      IF (ALLOCATED(lFa%cP)) DEALLOCATE(lFa%cP)
+      ALLOCATE(lFa%cP(nsd))
+      DO i=1, nsd
+         cP(i) = Integ(lFa, x, i)/lFa%area
+      END DO
+      lFa%cP = cP
 
 !     Compute face normals at nodes
       IF (ALLOCATED(lFa%nV)) DEALLOCATE(lFa%nV)
@@ -512,6 +520,11 @@
                   IF (lBc%eDrn(i) .NE. 0) sVl(i,:) = 0._RKIND
                END DO
             END IF
+            
+            IF (BTEST(lBc%bType,bType_ring)) THEN
+               sVl = 1._RKIND
+            END IF
+
             CALL FSILS_BC_CREATE(lhs, lsPtr, lFa%nNo, nsd, BC_TYPE_Dir,
      2         gNodes, sVl)
          END IF

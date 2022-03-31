@@ -358,6 +358,8 @@
          REAL(KIND=RKIND), ALLOCATABLE :: N(:,:)
 !        Normal vector to each nodal point
          REAL(KIND=RKIND), ALLOCATABLE :: nV(:,:)
+!        Center point of face
+         REAL(KIND=RKIND), ALLOCATABLE :: cP(:)
 !        Normal vector to each element
          REAL(KIND=RKIND), ALLOCATABLE :: enV(:,:)
 !        Shape functions derivative at Gauss points

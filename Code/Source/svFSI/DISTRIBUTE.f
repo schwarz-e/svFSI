@@ -512,6 +512,7 @@
       CALL cm%bcast(lFa%gN)
       CALL cm%bcast(lFa%lN)
       CALL cm%bcast(lFa%gE)
+      CALL cm%bcast(lFa%cP)
 
       RETURN
       END SUBROUTINE DISTIBFa

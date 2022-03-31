@@ -45,9 +45,11 @@
       LOGICAL :: eDir(maxnsd)
       INTEGER(KIND=IKIND) iFa, a, Ac, iEq, iBc, s, e, iM, nNo, lDof, i,
      2   j
-      REAL(KIND=RKIND) :: c1, c1i, c2
+      REAL(KIND=RKIND) :: c1, c1i, c2, cP(nsd), cV(nsd), tV(nsd),
+     2   vH(nsd,2), Q(nsd,nsd), nV(nsd)
 
       REAL(KIND=RKIND), ALLOCATABLE :: tmpA(:,:), tmpY(:,:)
+      REAL(KIND=RKIND), ALLOCATABLE :: ttmpA(:), ttmpY(:)
 
       DO iEq=1, nEq
          DO iBc=1, eq(iEq)%nBc
@@ -79,14 +81,22 @@
                   lDof = lDof + 1
                END IF
             END DO
-            IF (lDof .EQ. 0) lDof = e - s + 1
+
+            IF (BTEST(eq(iEq)%bc(iBc)%bType,bType_ring)) THEN
+               lDof = 1
+            ELSE IF (lDof .EQ. 0) THEN
+               lDof = e - s + 1
+            END IF
+
             iFa  = eq(iEq)%bc(iBc)%iFa
             iM   = eq(iEq)%bc(iBc)%iM
             nNo  = msh(iM)%fa(iFa)%nNo
             IF (ALLOCATED(tmpA)) DEALLOCATE(tmpA, tmpY)
             ALLOCATE(tmpA(lDof,nNo), tmpY(lDof,nNo))
+
             CALL SETBCDIRL(eq(iEq)%bc(iBc), msh(iM)%fa(iFa), tmpA, tmpY,
      2         lDof)
+
 
             IF (ANY(eDir)) THEN
                IF (BTEST(eq(iEq)%bc(iBc)%bType,bType_impD)) THEN
@@ -114,6 +124,37 @@
                      END DO
                   END DO
                END IF
+
+
+            ELSE IF (BTEST(eq(iEq)%bc(iBc)%bType,bType_ring)) THEN
+!              Imposing ring BC
+               IF (ALLOCATED(ttmpA)) DEALLOCATE(ttmpA, ttmpY)
+               ALLOCATE(ttmpA(lDof), ttmpY(lDof))
+               cP = msh(iM)%fa(iFa)%cP
+
+               DO a=1, msh(iM)%fa(iFa)%nNo
+                  Ac = msh(iM)%fa(iFa)%gN(a)
+                  nV = msh(iM)%fa(iFa)%nV(:,a)
+                  tV = x(:,Ac) - cP
+                  vH(:,1) = nV
+                  vH(:,2) = tV
+                  cV = CROSS(vH)
+                  Q(1,:) = (/1,0,0/)
+                  Q(2,:) = (/0,1,0/)
+                  Q(3,:) = (/0,0,1/)
+
+
+                  ttmpA = MATMUL(Q,lY(s:e,Ac))
+                  ttmpY = MATMUL(Q,lD(s:e,Ac))
+                  ttmpA(3) = tmpA(1,a)
+                  ttmpY(3) = tmpY(1,a)
+
+                  lY(s:e,Ac) = MATMUL(TRANSPOSE(Q),ttmpA)
+                  lD(s:e,Ac) = MATMUL(TRANSPOSE(Q),ttmpY)
+
+               END DO
+
+
             ELSE
                IF (BTEST(eq(iEq)%bc(iBc)%bType,bType_impD)) THEN
                   DO a=1, msh(iM)%fa(iFa)%nNo
@@ -209,6 +250,7 @@
          dirA = 0._RKIND
          dirY = lBc%g
       END IF
+
       IF (lDof .EQ. nsd) THEN
          DO a=1, lFa%nNo
             nV      = lFa%nV(:,a)
@@ -297,7 +339,7 @@
       ELSE
          DO a=1, nNo
             Ac     = lFa%gN(a)
-            hg(Ac) = -h(1)*lBc%gx(a)
+            hg(Ac) = -h(1)*lBc%gx(a) 
          END DO
       END IF
 
@@ -345,6 +387,25 @@
             hg(:,Ac) = tmpA(:,a)
          END DO
          DEALLOCATE(tmpA, hl)
+      ELSE IF (BTEST(lBc%bType,bType_ring)) THEN
+!        Imposing ring BC
+         IF (ALLOCATED(ttmpA)) DEALLOCATE(ttmpA, ttmpY)
+         ALLOCATE(ttmpA(lDof), ttmpY(lDof))
+         cP = lFa%cP
+
+         DO a=1, nNo
+            Ac = lFa%gN(a)
+            nV = lFa%nV(:,a)
+            tV = x(:,Ac) - cP
+            vH(:,1) = nV
+            vH(:,2) = tV
+            cV = CROSS(vH)
+            Q(1,:) = (/1,0,0/)
+            Q(2,:) = (/0,1,0/)
+            Q(3,:) = (/0,0,1/)
+
+            hg(nsd,Ac) = 0._RKIND
+         END DO         
 
       ELSE IF (BTEST(lBc%bType,bType_std)) THEN
          DO a=1, nNo

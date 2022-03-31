@@ -1821,6 +1821,14 @@
       IF (ltmp .OR. BTEST(lBc%bType,bType_CMM))
      2   lBc%bType = IBSET(lBc%bType,bType_zp)
 
+!     To impose ring behavior on Dirichlet/Traction face.
+!     Default is .false.
+      ltmp = .FALSE.
+      lPtr => list%get(ltmp, "Ring behavior")
+      IF (ltmp .AND. BTEST(lBc%bType,bType_Dir))
+     2   lBc%bType = IBSET(lBc%bType,bType_ring)
+
+
 !     Impose BC on the state variable or its integral
       ltmp = .FALSE.
       IF (phys.EQ.phys_lElas .OR. phys.EQ.phys_mesh .OR.
