@@ -312,7 +312,7 @@
             Fps(2,2) = p2
             Fps(3,3) = p3
 
-            Fps = MATMUL(Q,MATMUL(Fps,TRANSPOSE(Q)))
+            Fps = MATMUL(TRANSPOSE(Q),MATMUL(Fps,Q))
 
             Sb = g1*MATMUL(Fps,TRANSPOSE(Fps))
 
