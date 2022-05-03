@@ -462,7 +462,7 @@
             END IF
 
             IF (oGrp.EQ.outGrp_J .OR. oGrp.EQ.outGrp_Mises
-     2          .OR. oGrp.EQ.outGrp_WSS)
+     2          .OR. oGrp.EQ.outGrp_WSS .OR. oGrp.EQ.outGrp_sWSS)
      3         nOute = nOute + 1
          END DO
       END DO
@@ -616,6 +616,28 @@
                   END DO
                   DEALLOCATE(tmpV)
                   ALLOCATE(tmpV(maxnsd,msh(iM)%nNo))
+
+
+               CASE (outGrp_sWSS)
+                  IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
+                  IF (ALLOCATED(tmpVe)) DEALLOCATE(tmpVe)
+                  ALLOCATE(tmpV(l,msh(iM)%nNo), tmpVe(msh(iM)%nEl))
+                  tmpVe = 0._RKIND
+
+!     nodal swss
+                  CALL SWSSPOST(msh(iM),tmpV, tmpVe, lY, lD, iEq, oGrp)
+
+                  DO a=1, msh(iM)%nNo
+                     d(iM)%x(is:ie,a) = tmpV(1:l,a)
+                  END DO
+!     element swss
+                  nOute = nOute + 1
+                  outNamesE(nOute) = "E_sWSS"
+                  DO a=1, msh(iM)%nEl
+                     d(iM)%xe(nOute,a) = tmpVe(a)
+                  END DO
+
+                  DEALLOCATE(tmpV,tmpVe)
 
                CASE (outGrp_stress, outGrp_cauchy, outGrp_mises)
                   IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)

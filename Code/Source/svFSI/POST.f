@@ -53,8 +53,16 @@
          IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
          ALLOCATE(tmpV(maxnsd,msh(iM)%nNo))
          ALLOCATE(tmpVe(msh(iM)%nEl))
+
          IF (outGrp.EQ.outGrp_WSS .OR. outGrp.EQ.outGrp_trac) THEN
             CALL BPOST(msh(iM), tmpV, tmpVe, lY, lD, outGrp)
+            DO a=1, msh(iM)%nNo
+               Ac = msh(iM)%gN(a)
+               res(:,Ac) = tmpV(:,a)
+            END DO
+
+         ELSE IF (outGrp.EQ.outGrp_sWSS) THEN
+            CALL SWSSPOST(msh(iM), tmpV, tmpVe, lD, lY, iEq, outGrp)
             DO a=1, msh(iM)%nNo
                Ac = msh(iM)%gN(a)
                res(:,Ac) = tmpV(:,a)
@@ -399,7 +407,6 @@
             IF (lM%eType .EQ. eType_NRB) CALL NRBNNX(lM, Ec)
 !     Get element normal
             enV(:) = lM%fa(iFa)%enV(:,e)
-
 !     Finding the norm for all the nodes of this element, including
 !     those that don't belong to this face, which will be inerpolated
 !     from the nodes of the face
@@ -514,6 +521,344 @@
 
       RETURN
       END SUBROUTINE BPOST
+      !####################################################################
+!     Routine for post processing stress tensor
+      SUBROUTINE SWSSPOST(lM, res, resE, lY, lD, iEq, outGrp)
+      USE COMMOD
+      USE ALLFUN
+      USE MATFUN
+      IMPLICIT NONE
+      TYPE(mshType), INTENT(INOUT) :: lM
+      INTEGER(KIND=IKIND), INTENT(IN) :: iEq, outGrp
+      REAL(KIND=RKIND), INTENT(INOUT) :: res(maxnsd,lM%nNo),
+     2                                   resE(lM%nEl)
+      REAL(KIND=RKIND), INTENT(IN) :: lD(tDof,tnNo), lY(tDof,tnNo)
+
+      LOGICAL flag
+      INTEGER(KIND=IKIND) a, e, Ec, g, Ac, i, j, k, l, cPhys, insd,
+     2   nFn, iFa
+      REAL(KIND=RKIND) w, Jac, detF, Je, ya, Ja, elM, nu, lambda, mu,
+     2   p, trS, vmises, xi(nsd), xi0(nsd), xp(nsd), ed(nsymd),
+     3   Im(nsd,nsd), F(nsd,nsd), C(nsd,nsd), Eg(nsd,nsd), P1(nsd,nsd),
+     4   S(nsd,nsd), sigma(nsd,nsd), Dm(nsymd,nsymd), eVWP(nvwp),
+     5   sigma_temp(6), DD(6,6), SDD(6), S0(nsd,nsd), lRes(maxnsd),
+     6   Tdn(nsd), ndTdn, taue(nsd), nV(nsd)
+      TYPE(fsType) :: fs
+
+      INTEGER, ALLOCATABLE :: eNds(:)
+      REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), dl(:,:), yl(:,:),
+     2   fN(:,:), resl(:), Nx(:,:), N(:), sA(:), sF(:,:),
+     3   sE(:), lVWP(:,:), pS0l(:,:), enV(:), lnV(:,:), gnV(:,:)
+
+      dof  = eq(iEq)%dof
+      i    = eq(iEq)%s
+      j    = i + 1
+      k    = j + 1
+      nFn  = lM%nFn
+      IF (nFn .EQ. 0) nFn = 1
+
+!     For higher order elements, we lower the order of shape functions
+!     to compute the quantities at corner nodes of elements. We then
+!     use these lower order shape functions to interpolate the values
+!     at edge nodes and elements centers (if applicable)
+      flag = .FALSE.
+      IF (lM%eType.EQ.eType_TRI6  .OR. lM%eType.EQ.eType_QUD8  .OR.
+     2    lM%eType.EQ.eType_QUD9  .OR. lM%eType.EQ.eType_TET10 .OR.
+     3    lM%eType.EQ.eType_HEX20 .OR. lM%eType .EQ. eType_HEX27) THEN
+         flag =.TRUE.
+         CALL SETTHOODFS(fs, lM%eType)
+      ELSE
+         fs%eType = lM%eType
+         fs%lShpF = lM%lShpF
+         fs%eNoN  = lM%eNoN
+         fs%nG    = lM%nG
+      END IF
+      CALL INITFS(fs, nsd)
+
+      ALLOCATE (sA(tnNo), sF(maxnsd,tnNo), sE(lM%nEl), xl(nsd,fs%eNoN),
+     2   dl(tDof,fs%eNoN), yl(tDof,fs%eNoN), fN(nsd,nFn),
+     3   Nx(nsd,fs%eNoN), N(fs%eNoN), lVWP(nvwp,fs%eNoN),
+     4   pS0l(nsymd,fs%eNoN), enV(nsd), gnV(nsd,tnNo),lnV(nsd,fs%eNoN))
+
+      sA   = 0._RKIND
+      sF   = 0._RKIND
+      gnV  = 0._RKIND
+      enV  = 0._RKIND
+      lRes = 0._RKIND
+
+      S    = 0._RKIND
+      SDD  = 0._RKIND
+      sE   = 0._RKIND
+      insd = nsd
+      ya   = 0._RKIND
+      pS0l = 0._RKIND
+
+      IF (lM%lFib) insd = 1
+
+!     First creating the norm field
+      DO iFa=1, lM%nFa
+         DO a=1, lM%fa(iFa)%nNo
+            Ac        = lM%fa(iFa)%gN(a)
+            gnV(:,Ac) = lM%fa(iFa)%nV(:,a)
+         END DO
+      END DO
+
+!     fixme: have user indicate what boundary face is?
+!      DO iFa=1, lM%nFa
+      DO iFa=1, 1
+         DO e=1, lM%fa(iFa)%nEl
+
+            Ec = lM%fa(iFa)%gE(e)
+            cDmn  = DOMAIN(lM, iEq, Ec)
+
+            cPhys = eq(iEq)%dmn(cDmn)%phys
+            IF (cPhys .NE. phys_struct .AND.
+     2          cPhys .NE. phys_ustruct .AND.
+     3          cPhys .NE. phys_lElas) CYCLE
+
+            IF (cPhys .EQ. phys_lElas .AND. .NOT. useVarWall) THEN
+               elM = eq(iEq)%dmn(cDmn)%prop(elasticity_modulus)
+               nu  = eq(iEq)%dmn(cDmn)%prop(poisson_ratio)
+               lambda = elM*nu/(1._RKIND + nu)/(1._RKIND - 2._RKIND*nu)
+               mu     = 0.5_RKIND*elM/(1._RKIND + nu)
+            END IF
+
+            IF (lM%eType .EQ. eType_NRB) CALL NRBNNX(lM, Ec)
+
+            fN = 0._RKIND
+            IF (ALLOCATED(lM%fN)) THEN
+               DO l=1, nFn
+                  fN(:,l) = lM%fN((l-1)*nsd+1:l*nsd,Ec)
+               END DO
+            END IF
+
+            !     Get element normal
+            enV(:) = lM%fa(iFa)%enV(:,e)
+            PRINT *, enV
+
+            dl = 0._RKIND
+            yl = 0._RKIND
+            nV = 0._RKIND
+            DO a=1, fs%eNoN
+               lnV(:,a) = enV
+               nV       = nV + lnV(:,a)
+               Ac      = lM%IEN(a,Ec)
+               xl(:,a) = x(:,Ac)
+               dl(:,a) = lD(:,Ac)
+               yl(:,a) = lY(:,Ac)
+!              Varwall properties -----------------------------------------
+!              Calculate local wall property
+               IF (useVarWall) lVWP(:,a) = vWP0(:,Ac)
+               IF (ALLOCATED(pS0)) pS0l(:,a) = pS0(:,Ac)
+            END DO
+
+            nV = nV/lM%fa(iFa)%eNoN
+            DO a=1, fs%eNoN
+               IF (ISZERO(NORM(lnV(:,a)))) lnV(:,a) = nV
+            END DO
+
+            Je = 0._RKIND
+            DO g=1, fs%nG
+               IF (g.EQ.1 .OR. .NOT.fs%lShpF) THEN
+                  CALL GNN(fs%eNoN, insd, fs%Nx(:,:,g), xl, Nx, Jac, Im)
+               END IF
+               w  = fs%w(g)*Jac
+               N  = fs%N(:,g)
+               Je = Je + w
+
+               Im = MAT_ID(nsd)
+               F  = Im
+               eVWP = 0._RKIND
+               S0   = 0._RKIND
+               DO a=1, fs%eNoN
+
+                  nV = nV + N(a)*lnV(:,a)
+                  IF (nsd .EQ. 3) THEN
+                     F(1,1) = F(1,1) + Nx(1,a)*dl(i,a)
+                     F(1,2) = F(1,2) + Nx(2,a)*dl(i,a)
+                     F(1,3) = F(1,3) + Nx(3,a)*dl(i,a)
+                     F(2,1) = F(2,1) + Nx(1,a)*dl(j,a)
+                     F(2,2) = F(2,2) + Nx(2,a)*dl(j,a)
+                     F(2,3) = F(2,3) + Nx(3,a)*dl(j,a)
+                     F(3,1) = F(3,1) + Nx(1,a)*dl(k,a)
+                     F(3,2) = F(3,2) + Nx(2,a)*dl(k,a)
+                     F(3,3) = F(3,3) + Nx(3,a)*dl(k,a)
+!                    Variable wall -------------------------------------
+!                    Calculate local wall property
+                     IF (useVarWall) THEN
+                        eVWP(:) = eVWP(:) + N(a)*lVWP(:,a)
+                     END IF
+
+                     S0(1,1) = S0(1,1) + N(a)*pS0l(1,a)
+                     S0(2,2) = S0(2,2) + N(a)*pS0l(2,a)
+                     S0(3,3) = S0(3,3) + N(a)*pS0l(3,a)
+                     S0(1,2) = S0(1,2) + N(a)*pS0l(4,a)
+                     S0(2,3) = S0(2,3) + N(a)*pS0l(5,a)
+                     S0(3,1) = S0(3,1) + N(a)*pS0l(6,a)
+
+                  ELSE
+                     F(1,1) = F(1,1) + Nx(1,a)*dl(i,a)
+                     F(1,2) = F(1,2) + Nx(2,a)*dl(i,a)
+                     F(2,1) = F(2,1) + Nx(1,a)*dl(j,a)
+                     F(2,2) = F(2,2) + Nx(2,a)*dl(j,a)
+
+                     S0(1,1) = S0(1,1) + N(a)*pS0l(1,a)
+                     S0(2,2) = S0(2,2) + N(a)*pS0l(2,a)
+                     S0(1,2) = S0(1,2) + N(a)*pS0l(3,a)
+                  END IF
+               END DO
+
+               IF (nsd .EQ. 3) THEN
+                  S0(2,1) = S0(1,2)
+                  S0(3,2) = S0(2,3)
+                  S0(1,3) = S0(3,1)
+               ELSE
+                  S0(2,1) = S0(1,2)
+               END IF
+
+               IF (cPhys .EQ. phys_lElas .AND. useVarWall) THEN
+                  DD(1,:) = eVWP(1:6)
+                  DD(2,:) = eVWP(7:12)
+                  DD(3,:) = eVWP(13:18)
+                  DD(4,:) = eVWP(19:24)
+                  DD(5,:) = eVWP(25:30)
+                  DD(6,:) = eVWP(31:36)
+               END IF
+               detF = MAT_DET(F, nsd)
+
+               ed = 0._RKIND
+               IF (cPhys .EQ. phys_lElas) THEN
+                  DO a=1, fs%eNoN
+                     IF (nsd .EQ. 3) THEN
+                        ed(1) = ed(1) + Nx(1,a)*dl(i,a)
+                        ed(2) = ed(2) + Nx(2,a)*dl(j,a)
+                        ed(3) = ed(3) + Nx(3,a)*dl(k,a)
+                        ed(4) = ed(4) + Nx(2,a)*dl(i,a)
+     2                          + Nx(1,a)*dl(j,a)
+                        ed(5) = ed(5) + Nx(3,a)*dl(j,a)
+     2                          + Nx(2,a)*dl(k,a)
+                        ed(6) = ed(6) + Nx(1,a)*dl(k,a)
+     2                          + Nx(3,a)*dl(i,a)
+                     ELSE
+                        ed(1) = ed(1) + Nx(1,a)*dl(i,a)
+                        ed(2) = ed(2) + Nx(2,a)*dl(j,a)
+                        ed(3) = ed(3) + Nx(2,a)*dl(i,a)
+     2                          + Nx(1,a)*dl(j,a)
+                     END IF
+                  END DO
+               END IF
+
+               IF (cPhys .EQ. phys_lElas) THEN
+                  IF (useVarWall) THEN
+                     SDD(:) = MATMUL(DD,ed)
+                     sigma(1,1) = SDD(1)
+
+                     sigma(2,2) = SDD(2)
+                     
+                     sigma(3,3) = SDD(3)
+
+                     sigma(1,2) = SDD(4)
+                     sigma(2,1) = SDD(4)
+
+                     sigma(3,2) = SDD(5)
+                     sigma(2,3) = SDD(5)
+
+                     sigma(3,1) = SDD(6)
+                     sigma(1,3) = SDD(6)
+                  ELSE
+                     IF (nsd .EQ. 3) THEN
+                        detF = lambda*(ed(1) + ed(2) + ed(3))
+                        sigma(1,1) = detF + 2._RKIND*mu*ed(1)
+                        sigma(2,2) = detF + 2._RKIND*mu*ed(2)
+                        sigma(3,3) = detF + 2._RKIND*mu*ed(3)
+
+                        sigma(1,2) = mu*ed(4)
+                        sigma(2,3) = mu*ed(5)
+                        sigma(3,1) = mu*ed(6)
+
+                        sigma(2,1) = sigma(1,2)
+                        sigma(3,2) = sigma(2,3)
+                        sigma(1,3) = sigma(3,1)
+                     ELSE
+                        detF = lambda*(ed(1) + ed(2))
+                        sigma(1,1) = detF + 2._RKIND*mu*ed(1)
+                        sigma(2,2) = detF + 2._RKIND*mu*ed(2)
+                        sigma(1,2) = mu*ed(3)
+                        sigma(2,1) = sigma(1,2)
+                     END IF
+                  END IF
+
+               ELSE IF (cPhys .EQ. phys_ustruct) THEN
+                  p = 0._RKIND
+                  DO a=1, fs%eNoN
+                     p = p + N(a)*yl(k+1,a)
+                  END DO
+                  p = (-p)*detF
+
+                  CALL GETPK2CCdev(eq(iEq)%dmn(cDmn), F, nFn, fN, ya, S,
+     2                 Dm, Ja)
+
+                  C  = MATMUL(TRANSPOSE(F), F)
+                  S  = S + p*MAT_INV(C, nsd)
+
+                  P1 = MATMUL(F, S)
+                  sigma = MATMUL(P1, TRANSPOSE(F))
+                  IF (.NOT.ISZERO(detF)) sigma(:,:) = sigma(:,:) / detF
+
+               ELSE IF (cPhys .EQ. phys_struct) THEN
+                  CALL GETPK2CC(eq(iEq)%dmn(cDmn), F, nFn, fN, ya,
+     2                         S,Dm, eVWP)
+                  S = S + S0
+                  P1 = MATMUL(F, S)
+                  sigma = MATMUL(P1, TRANSPOSE(F))
+                  IF (.NOT.ISZERO(detF)) sigma(:,:) = sigma(:,:) / detF
+
+               END IF
+
+               Tdn   = 0._RKIND
+               ndTdn = 0._RKIND
+               DO i=1,nsd
+                  DO j=1, nsd
+                     Tdn(i) = Tdn(i) + sigma(i,j)*nV(j)
+                  END DO
+                  ndTdn = ndTdn + Tdn(i)*nV(i)
+               END DO
+               taue = Tdn - ndTdn*nV
+
+               lRes(1:nsd) = taue
+
+               DO a=1, fs%eNoN
+                  Ac       = lM%IEN(a,Ec)
+                  sA(Ac)   = sA(Ac)   + w*N(a)
+                  sF(:,Ac) = sF(:,Ac) + w*N(a)*lRes
+               END DO
+
+               resE(Ec) = resE(Ec) + SQRT(NORM(lRes)) / lM%nG
+            END DO
+         END DO
+      END DO
+
+      CALL COMMU(sF)
+      CALL COMMU(sA)
+
+      DO iFa=1, lM%nFa
+         DO a=1, lM%fa(iFa)%nNo
+            Ac = lM%fa(iFa)%gN(a)
+            IF (.NOT.ISZERO(sA(Ac))) THEN
+               sF(:,Ac) = sF(:,Ac)/sA(Ac)
+               sA(Ac)   = 1._RKIND
+            END IF
+         END DO
+      END DO
+
+      res = 0._RKIND
+      DO a=1, lM%nNo
+         Ac       = lM%gN(a)
+         res(:,a) = sF(:,Ac)
+      END DO
+
+      RETURN
+      END SUBROUTINE SWSSPOST
 !####################################################################
 !     Routine for post processing stress tensor
       SUBROUTINE TPOST(lM, m, res, resE, lD, lY, iEq, outGrp)

@@ -166,6 +166,8 @@
          DD(5,:) = eVWP(25:30)
          DD(6,:) = eVWP(31:36)
 
+         g1 = eVWP(37)
+
          CALL VOIGTTOCC(CCb, DD)
 !        Compute isochoric component of E
          E = 0.5_RKIND * ((J2d/dV2d)*C - Idm)
@@ -174,6 +176,8 @@
          r1  = (J2d/dV2d)*MAT_DDOT(C, Sb, nsd) / nd
          S   = (J2d/dV2d)*Sb - r1*Ci
 
+         CCb = ((J2d/dV2d)**2)*CCb
+
          PP  = TEN_IDs(nsd) - (1._RKIND/nd) * TEN_DYADPROD(Ci, C, nsd)
          CC  = TEN_DDOT(CCb, PP, nsd)
          CC  = TEN_TRANSPOSE(CC, nsd)
@@ -181,9 +185,9 @@
          CC  = CC - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, S, nsd) +
      2                           TEN_DYADPROD(S, Ci, nsd) )
 
-         S   = S + p*J*Ci
-         CC  = CC + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd) +
-     2          (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+         S   = S + (p-g1)*J*Ci
+         CC  = CC + 2._RKIND*(r1 - (p-g1)*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2         +((pl-g1)*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
 
 !     NeoHookean model
       CASE (stIso_nHook)
@@ -280,7 +284,7 @@
      2          (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
 
 
-!     MM (Mixture Model) model based on Ogden for anisotropic,
+!     MM (Mixed Mixture Model) model based on Ogden for anisotropic,
 !     NeoHookean for isotropic
       CASE (stIso_MM)
          IF (.NOT. useVarWall) err = "Need defined variable "//
@@ -762,8 +766,8 @@ c     2      (EXP(stM%khs*Ess) + EXP(-stM%khs*Ess) + 2.0_RKIND)
       Kp = stM%Kpen
       SELECT CASE (stM%volType)
       CASE (stVol_Var)
-         p  = Kp*(J-dV)
-         pl = Kp*(2._RKIND*J-dV)
+         p  = Kp*(J/dV-1._RKIND)
+         pl = Kp*(2._RKIND*(J/dV)-1._RKIND)
 
       CASE (stVol_Quad)
          p  = Kp*(J-1._RKIND)

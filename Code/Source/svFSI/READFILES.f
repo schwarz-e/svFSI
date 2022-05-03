@@ -812,7 +812,7 @@
 
          CALL READDOMAIN(lEq, propL, list, phys)
 
-         nDOP = (/22,4,2,0/)
+         nDOP = (/23,4,2,0/)
          outPuts(1)  = out_velocity
          outPuts(2)  = out_pressure
          outPuts(3)  = out_displacement
@@ -835,9 +835,10 @@
          outPuts(18) = out_integ
          outPuts(19) = out_fibDir
          outPuts(20) = out_fibAlign
+         outPuts(21) = out_sWSS
 
-         outPuts(21) = out_divergence
-         outPuts(22) = out_acceleration
+         outPuts(22) = out_divergence
+         outPuts(23) = out_acceleration
 
          CALL READLS(lSolver_GMRES, lEq, list)
 
@@ -1480,6 +1481,11 @@
             lEq%output(iOut)%o    = 0
             lEq%output(iOut)%l    = 1
             lEq%output(iOut)%name = "Viscosity"
+         CASE (out_sWSS)
+            lEq%output(iOut)%grp  = outGrp_sWSS
+            lEq%output(iOut)%o    = 0
+            lEq%output(iOut)%l    = nsd
+            lEq%output(iOut)%name = "sWSS"
          CASE DEFAULT
             err = "Internal output undefined"
          END SELECT
