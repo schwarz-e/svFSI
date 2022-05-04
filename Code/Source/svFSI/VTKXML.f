@@ -625,8 +625,9 @@
                   tmpVe = 0._RKIND
 
 !     nodal swss
-                  CALL SWSSPOST(msh(iM),tmpV, tmpVe, lY, lD, iEq, oGrp)
-
+                  CALL SWSSPOST(msh(iM), l, tmpV, tmpVe,
+     2               lD, lY, iEq, oGrp)
+                  
                   DO a=1, msh(iM)%nNo
                      d(iM)%x(is:ie,a) = tmpV(1:l,a)
                   END DO
