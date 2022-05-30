@@ -506,10 +506,11 @@
          lPtr => list%get(pstEq, "Prestress")
 
          IF (pstEq) THEN
-            nDOP = (/3,2,0,0/)
+            nDOP = (/4,2,0,0/)
             outPuts(1)  = out_displacement
             outPuts(2)  = out_stress
             outPuts(3)  = out_strain
+            outPuts(4) = out_jacobian
          ELSE
             nDOP = (/10,2,0,0/)
             outPuts(1) = out_displacement
@@ -553,11 +554,12 @@
          lPtr => list%get(pstEq, "Prestress")
 
          IF (pstEq) THEN
-            nDOP = (/4,2,0,0/)
+            nDOP = (/5,2,0,0/)
             outPuts(1)  = out_displacement
             outPuts(2)  = out_stress
             outPuts(3)  = out_cauchy
             outPuts(4)  = out_strain
+            outPuts(5)  = out_jacobian
          ELSE
             nDOP = (/12,2,0,0/)
             outPuts(1)  = out_displacement
