@@ -902,6 +902,8 @@
       INTEGER(KIND=IKIND) nsymd
 !     Number of variable wall properties to read in from mesh
       INTEGER(KIND=IKIND) nvwp
+!     Number of element variable wall properties to read in from mesh
+      INTEGER(KIND=IKIND) nvwpe
 
 !     REAL VARIABLES
 !     Time step size

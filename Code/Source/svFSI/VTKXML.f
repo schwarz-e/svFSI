@@ -419,14 +419,18 @@
       LOGICAL :: lIbl, lD0
       INTEGER(KIND=IKIND) :: iStat, iEq, iOut, iM, a, e, Ac, Ec, nNo,
      2   nEl, s, l, ie, is, nSh, oGrp, outDof, nOut, cOut, ne, iFn, nFn,
-     3   nOute
+     3   nOute, b, c
       CHARACTER(LEN=stdL) :: fName
       TYPE(dataType) :: d(nMsh)
       TYPE(vtkXMLType) :: vtu
 
       INTEGER(KIND=IKIND), ALLOCATABLE :: outS(:), tmpI(:,:)
-      REAL(KIND=RKIND), ALLOCATABLE :: tmpV(:,:), tmpVe(:)
+      REAL(KIND=RKIND), ALLOCATABLE :: tmpV(:,:), tmpVe(:), tmpVeS(:,:)
       CHARACTER(LEN=stdL), ALLOCATABLE :: outNames(:), outNamesE(:)
+      CHARACTER(LEN=stdL), DIMENSION(9) :: outFNames
+
+      outFNames = (/"F_1","F_2","F_3","F_4","F_5","F_6",
+     2              "F_7","F_8","F_9"/)
 
       lIbl = .FALSE.
       lD0  = .FALSE.
@@ -462,8 +466,9 @@
             END IF
 
             IF (oGrp.EQ.outGrp_J .OR. oGrp.EQ.outGrp_Mises
-     2          .OR. oGrp.EQ.outGrp_WSS)
+     2          .OR. oGrp.EQ.outGrp_WSS .OR. oGrp.EQ.outGrp_cauchy)
      3         nOute = nOute + 1
+            IF (oGrp .EQ. outGrp_F) nOute = nOute + (nsd*nsd)
          END DO
       END DO
 
@@ -619,10 +624,10 @@
 
                CASE (outGrp_stress, outGrp_cauchy, outGrp_mises)
                   IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
-                  IF (ALLOCATED(tmpVe)) DEALLOCATE(tmpVe)
-                  ALLOCATE(tmpV(l,msh(iM)%nNo), tmpVe(msh(iM)%nEl))
+                  IF (ALLOCATED(tmpVeS)) DEALLOCATE(tmpVeS)
+                  ALLOCATE(tmpV(l,msh(iM)%nNo), tmpVeS(1,msh(iM)%nEl))
                   tmpV  = 0._RKIND
-                  tmpVe = 0._RKIND
+                  tmpVeS = 0._RKIND
                   IF (pstEq) THEN
                      DO a=1, msh(iM)%nNo
                         Ac = msh(iM)%gN(a)
@@ -630,8 +635,8 @@
                      END DO
                   END IF
 
-                  IF (.NOT.cmmInit) CALL TPOST(msh(iM), l, tmpV, tmpVe,
-     2               lD, lY, iEq, oGrp)
+                  IF (.NOT.cmmInit) CALL TPOST(msh(iM), l, 1, tmpV,
+     2               tmpVeS, lD, lY, iEq, oGrp)
                   DO a=1, msh(iM)%nNo
                      d(iM)%x(is:ie,a) = tmpV(1:l,a)
                   END DO
@@ -640,21 +645,44 @@
                      nOute = nOute + 1
                      outNamesE(nOute) = "E_VonMises"
                      DO a=1, msh(iM)%nEl
-                        d(iM)%xe(nOute,a) = tmpVe(a)
+                        d(iM)%xe(nOute,a) = tmpVeS(1,a)
                      END DO
                   END IF
 
-                  DEALLOCATE(tmpV, tmpVe)
+                  IF (oGrp .EQ. outGrp_cauchy) THEN
+                     nOute = nOute + 1
+                     outNamesE(nOute) = "E_CauchyStressInvI"
+                     DO a=1, msh(iM)%nEl
+                        d(iM)%xe(nOute,a) = tmpVeS(1,a)
+                     END DO
+                  END IF
+
+                  DEALLOCATE(tmpV, tmpVeS)
                   ALLOCATE(tmpV(maxnsd,msh(iM)%nNo))
 
                CASE (outGrp_J, outGrp_F, outGrp_strain)
                   IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
-                  IF (ALLOCATED(tmpVe)) DEALLOCATE(tmpVe)
-                  ALLOCATE(tmpV(l,msh(iM)%nNo), tmpVe(msh(iM)%nEl))
+                  IF (ALLOCATED(tmpVeS)) DEALLOCATE(tmpVeS)
+                  IF (oGrp .EQ. outGrp_F) THEN
+                     ALLOCATE(tmpV(l,msh(iM)%nNo),
+     2                        tmpVeS(nsd*nsd, msh(iM)%nEl))
+                  ELSE
+                     ALLOCATE(tmpV(l,msh(iM)%nNo),
+     2                        tmpVeS(1, msh(iM)%nEl))
+                  END IF
                   tmpV  = 0._RKIND
-                  tmpVe = 0._RKIND
+                  tmpVeS = 0._RKIND
 
-                  CALL TPOST(msh(iM), l, tmpV, tmpVe, lD, lY, iEq, oGrp)
+
+                  IF (oGrp .EQ. outGrp_F) THEN
+                     CALL TPOST(msh(iM), l, nsd*nsd, tmpV, tmpVeS,
+     2                       lD, lY, iEq, oGrp)
+                  ELSE
+                     CALL TPOST(msh(iM), l, 1, tmpV, tmpVeS,
+     2                       lD, lY, iEq, oGrp)
+                  END IF
+
+
                   DO a=1, msh(iM)%nNo
                      d(iM)%x(is:ie,a) = tmpV(1:l,a)
                   END DO
@@ -663,11 +691,23 @@
                      nOute = nOute + 1
                      outNamesE(nOute) = "E_Jacobian"
                      DO a=1, msh(iM)%nEl
-                        d(iM)%xe(nOute,a) = tmpVe(a)
+                        d(iM)%xe(nOute,a) = tmpVeS(1,a)
                      END DO
                   END IF
 
-                  DEALLOCATE(tmpV, tmpVe)
+                  IF (oGrp .EQ. outGrp_F) THEN
+                     DO b = 1, nsd
+                        DO c = 1, nsd
+                           nOute = nOute + 1
+                           outNamesE(nOute)="E_"//outFNames((b-1)*nsd+c)
+                           DO a=1, msh(iM)%nEl
+                              d(iM)%xe(nOute,a)=tmpVeS((b-1)*nsd+c,a)
+                           END DO
+                        END DO
+                     END DO
+                  END IF
+
+                  DEALLOCATE(tmpV, tmpVeS)
                   ALLOCATE(tmpV(maxnsd,msh(iM)%nNo))
 
                CASE (outGrp_divV)

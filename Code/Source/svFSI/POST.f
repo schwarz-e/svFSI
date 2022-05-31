@@ -47,7 +47,7 @@
 
       INTEGER(KIND=IKIND) a, Ac, iM
 
-      REAL(KIND=RKIND), ALLOCATABLE :: tmpV(:,:), tmpVe(:)
+      REAL(KIND=RKIND), ALLOCATABLE :: tmpV(:,:), tmpVe(:), tmpVeS(:,:)
 
       DO iM=1, nMsh
          IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
@@ -62,30 +62,30 @@
 
          ELSE IF (outGrp .EQ. outGrp_J) THEN
             IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
-            ALLOCATE(tmpV(1,msh(iM)%nNo), tmpVe(msh(iM)%nEl))
+            ALLOCATE(tmpV(1,msh(iM)%nNo), tmpVeS(1,msh(iM)%nEl))
             tmpV  = 0._RKIND
-            tmpVe = 0._RKIND
-            CALL TPOST(msh(iM), 1, tmpV, tmpVe, lD, lY, iEq, outGrp)
+            tmpVeS = 0._RKIND
+            CALL TPOST(msh(iM), 1, 1, tmpV, tmpVeS, lD, lY, iEq, outGrp)
             res  = 0._RKIND
             DO a=1, msh(iM)%nNo
                Ac = msh(iM)%gN(a)
                res(1,Ac) = tmpV(1,a)
             END DO
-            DEALLOCATE(tmpV, tmpVe)
+            DEALLOCATE(tmpV, tmpVeS)
             ALLOCATE(tmpV(maxnsd,msh(iM)%nNo))
 
          ELSE IF (outGrp .EQ. outGrp_mises) THEN
             IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
-            ALLOCATE(tmpV(1,msh(iM)%nNo), tmpVe(msh(iM)%nEl))
+            ALLOCATE(tmpV(1,msh(iM)%nNo), tmpVeS(1,msh(iM)%nEl))
             tmpV  = 0._RKIND
-            tmpVe = 0._RKIND
-            CALL TPOST(msh(iM), 1, tmpV, tmpVe, lD, lY, iEq, outGrp)
+            tmpVeS = 0._RKIND
+            CALL TPOST(msh(iM), 1, 1, tmpV, tmpVeS, lD, lY, iEq, outGrp)
             res  = 0._RKIND
             DO a=1, msh(iM)%nNo
                Ac = msh(iM)%gN(a)
                res(1,Ac) = tmpV(1,a)
             END DO
-            DEALLOCATE(tmpV, tmpVe)
+            DEALLOCATE(tmpV, tmpVeS)
             ALLOCATE(tmpV(maxnsd,msh(iM)%nNo))
 
          ELSE IF (outGrp .EQ. outGrp_divV) THEN
@@ -516,14 +516,14 @@
       END SUBROUTINE BPOST
 !####################################################################
 !     Routine for post processing stress tensor
-      SUBROUTINE TPOST(lM, m, res, resE, lD, lY, iEq, outGrp)
+      SUBROUTINE TPOST(lM, m, me, res, resE, lD, lY, iEq, outGrp)
       USE COMMOD
       USE ALLFUN
       USE MATFUN
       IMPLICIT NONE
       TYPE(mshType), INTENT(INOUT) :: lM
-      INTEGER(KIND=IKIND), INTENT(IN) :: m, iEq, outGrp
-      REAL(KIND=RKIND), INTENT(INOUT) :: res(m,lM%nNo), resE(lM%nEl)
+      INTEGER(KIND=IKIND), INTENT(IN) :: m, me, iEq, outGrp
+      REAL(KIND=RKIND), INTENT(INOUT) :: res(m,lM%nNo), resE(me, lM%nEl)
       REAL(KIND=RKIND), INTENT(IN) :: lD(tDof,tnNo), lY(tDof,tnNo)
 
       LOGICAL flag
@@ -539,7 +539,7 @@
       INTEGER, ALLOCATABLE :: eNds(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), dl(:,:), yl(:,:),
      2   fN(:,:), resl(:), Nx(:,:), N(:), sA(:), sF(:,:),
-     3   sE(:), lVWP(:,:), pS0l(:,:)
+     3   sE(:,:), lVWP(:,:), pS0l(:,:)
 
       dof  = eq(iEq)%dof
       i    = eq(iEq)%s
@@ -566,7 +566,7 @@
       END IF
       CALL INITFS(fs, nsd)
 
-      ALLOCATE (sA(tnNo), sF(m,tnNo), sE(lM%nEl), xl(nsd,fs%eNoN),
+      ALLOCATE (sA(tnNo), sF(m,tnNo), sE(me,lM%nEl), xl(nsd,fs%eNoN),
      2   dl(tDof,fs%eNoN), yl(tDof,fs%eNoN), fN(nsd,nFn), resl(m),
      3   Nx(nsd,fs%eNoN), N(fs%eNoN), lVWP(nvwp,fs%eNoN),
      4   pS0l(nsymd,fs%eNoN))
@@ -707,7 +707,7 @@
             CASE (outGrp_J)
 !           Jacobian := determinant of deformation gradient tensor
                resl(1) = detF
-               sE(e)   = sE(e) + w*detF
+               sE(1,e)   = sE(1,e) + w*detF
 
             CASE (outGrp_F)
 !           Deformation gradient tensor (F)
@@ -721,11 +721,26 @@
                   resl(7) = F(3,1)
                   resl(8) = F(3,2)
                   resl(9) = F(3,3)
+
+                  sE(1,e)   = sE(1,e) + w*F(1,1)
+                  sE(2,e)   = sE(2,e) + w*F(1,2)
+                  sE(3,e)   = sE(3,e) + w*F(1,3)
+                  sE(4,e)   = sE(4,e) + w*F(2,1)
+                  sE(5,e)   = sE(5,e) + w*F(2,2)
+                  sE(6,e)   = sE(6,e) + w*F(2,3)
+                  sE(7,e)   = sE(7,e) + w*F(3,1)
+                  sE(8,e)   = sE(8,e) + w*F(3,2)
+                  sE(9,e)   = sE(9,e) + w*F(3,3)
                ELSE
                   resl(1) = F(1,1)
                   resl(2) = F(1,2)
                   resl(3) = F(2,1)
                   resl(4) = F(2,2)
+
+                  sE(1,e)   = sE(1,e) + w*F(1,1)
+                  sE(2,e)   = sE(2,e) + w*F(1,2)
+                  sE(3,e)   = sE(3,e) + w*F(2,1)
+                  sE(4,e)   = sE(4,e) + w*F(2,2)
                END IF
 
             CASE (outGrp_strain)
@@ -842,10 +857,17 @@
                      resl(4) = sigma(1,2)
                      resl(5) = sigma(2,3)
                      resl(6) = sigma(3,1)
+
+!                     trS = MAT_TRACE(sigma, nsd)
+!                     sE(1,e) = sE(1,e) + w*trS
+
                   ELSE
                      resl(1) = sigma(1,1)
                      resl(2) = sigma(2,2)
                      resl(3) = sigma(1,2)
+                     
+!                     trS = MAT_TRACE(sigma, nsd)
+!                     sE(1,e) = sE(1,e) + w*trS
                   END IF
 
 !              Von Mises stress
@@ -856,7 +878,7 @@
                   END DO
                   vmises  = SQRT(MAT_DDOT(sigma, sigma, nsd))
                   resl(1) = vmises
-                  sE(e)   = sE(e) + w*vmises
+                  sE(1,e)   = sE(1,e) + w*vmises
                END IF
 
             END SELECT
@@ -866,10 +888,13 @@
                sA(Ac)   = sA(Ac)   + w*N(a)
                sF(:,Ac) = sF(:,Ac) + w*N(a)*resl(:)
             END DO
+            IF (outGrp .EQ. outGrp_cauchy) THEN
+               sE(1,e) = sE(1,e) + resl(1) / lM%nG
+            END IF
          END DO
-         IF (.NOT.ISZERO(Je)) sE(e) = sE(e)/Je
+         IF (outGrp .NE. outGrp_cauchy) sE(:,e) = sE(:,e)/Je
       END DO
-      resE(:) = sE(:)
+      resE(:,:) = sE(:,:)
 
       CALL COMMU(sF)
       CALL COMMU(sA)

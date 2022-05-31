@@ -408,6 +408,8 @@ c               END IF
          END DO
       END IF
 
+!     Read element varwall properties ----------------------------------
+
 !     Read varwall properties ------------------------------------------
       flag = .FALSE.
       DO iM=1, nMsh
