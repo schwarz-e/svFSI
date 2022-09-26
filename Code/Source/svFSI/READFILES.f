@@ -123,6 +123,7 @@
             saveName = ""
             appPath = STR(cm%np())//"-procs"//delimiter
          END IF
+         IF (appPath .NE. "") CALL SYSTEM("mkdir -p "//TRIM(appPath))
 
          lPtr => list%get(std%oTS,"Verbose")
          lPtr => list%get(wrn%oTS,"Warning")
@@ -433,7 +434,7 @@
          IF (nsd .EQ. 3) propL(5,1) = f_z
          CALL READDOMAIN(lEq, propL, list)
 
-         nDOP = (/12,2,3,0/)
+         nDOP = (/13,2,3,0/)
          outPuts(1)  = out_velocity
          outPuts(2)  = out_pressure
          outPuts(3)  = out_WSS
@@ -447,6 +448,7 @@
          outPuts(10) = out_divergence
          outPuts(11) = out_acceleration
          outPuts(12) = out_displacement
+         outPuts(13) = out_gradient
 
          CALL READLS(lSolver_NS, lEq, list)
 
@@ -600,7 +602,7 @@
          lPtr => list%get(pstEq, "Prestress")
          IF (pstEq) err = "Prestress for USTRUCT is not implemented yet"
 
-         nDOP = (/14,2,0,0/)
+         nDOP = (/15,2,0,0/)
          outPuts(1)  = out_displacement
          outPuts(2)  = out_mises
          outPuts(3)  = out_stress
@@ -709,7 +711,7 @@
                propL(7,1) = elasticity_modulus
             END IF
 
-            nDOP = (/12,4,3,0/)
+            nDOP = (/13,4,3,0/)
             outPuts(1)  = out_velocity
             outPuts(2)  = out_pressure
             outPuts(3)  = out_WSS
@@ -722,6 +724,7 @@
             outPuts(10) = out_viscosity
             outPuts(11) = out_divergence
             outPuts(12) = out_acceleration
+            outPuts(13) = out_gradient
          ELSE
             propL(1,1) = poisson_ratio
             IF (.NOT.cmmVarWall) THEN
@@ -814,7 +817,7 @@
 
          CALL READDOMAIN(lEq, propL, list, phys)
 
-         nDOP = (/22,4,2,0/)
+         nDOP = (/23,4,2,0/)
          outPuts(1)  = out_velocity
          outPuts(2)  = out_pressure
          outPuts(3)  = out_displacement
@@ -840,6 +843,7 @@
 
          outPuts(21) = out_divergence
          outPuts(22) = out_acceleration
+         outPuts(23) = out_gradient
 
          CALL READLS(lSolver_GMRES, lEq, list)
 
@@ -1482,6 +1486,11 @@
             lEq%output(iOut)%o    = 0
             lEq%output(iOut)%l    = 1
             lEq%output(iOut)%name = "Viscosity"
+         CASE (out_gradient)
+            lEq%output(iOut)%grp  = outGrp_gradV
+            lEq%output(iOut)%o    = 0
+            lEq%output(iOut)%l    = maxnsd*maxnsd
+            lEq%output(iOut)%name = "Gradient"
          CASE DEFAULT
             err = "Internal output undefined"
          END SELECT

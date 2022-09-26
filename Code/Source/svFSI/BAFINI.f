@@ -303,6 +303,10 @@
                END IF
                sV(:,Ac) = (nV + sV(:,Bc))*0.5_RKIND
             END DO
+
+!           Store element normal
+            lFa%enV(:,e) = nV(:) / SQRT(NORM(nV))
+            
          END DO
          DEALLOCATE(xl, ptr, setIt)
       END IF

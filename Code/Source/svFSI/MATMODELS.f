@@ -185,9 +185,10 @@
          CC  = CC - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, S, nsd) +
      2                           TEN_DYADPROD(S, Ci, nsd) )
 
-         S   = S + (p-g1)*J*Ci
-         CC  = CC + 2._RKIND*(r1 - (p-g1)*J) * TEN_SYMMPROD(Ci, Ci, nsd)
-     2         +((pl-g1)*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+         S   = S + (p+g1)*J*Ci
+         
+         CC  = CC + 2._RKIND*(r1 - (p+g1)*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2         +((pl+g1)*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
 
 !     NeoHookean model
       CASE (stIso_nHook)
@@ -340,9 +341,13 @@
 
 !           volR_alpha
             vFa  = eVWP(1+(nIso + i-1)*nVars)
+!           Prestretch    
             gan  = eVWP(2+(nIso + i-1)*nVars)
+!           First material model property
             vaff = eVWP(3+(nIso + i - 1)*nVars)
+!           Second material model property
             vbff = eVWP(4+(nIso + i - 1)*nVars)
+!           Fiber direction
             fdir = eVWP(5+(nIso + i - 1)*nVars:
      2             7+(nIso + i - 1)*nVars)
 
