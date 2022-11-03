@@ -532,6 +532,8 @@
          INTEGER(KIND=IKIND) vtkType
 !        Number of fiber directions
          INTEGER(KIND=IKIND) nFn
+!        Number of variable wall properties
+         INTEGER(KIND=IKIND) nvw
 !        Mesh scale factor
          REAL(KIND=RKIND) scF
 !        IB: Mesh size parameter
@@ -580,6 +582,8 @@
 !        Fiber orientations stored at the element level - used for
 !        electrophysiology and solid mechanics
          REAL(KIND=RKIND), ALLOCATABLE :: fN(:,:)
+!        Variable wall values stored at the element level
+         REAL(KIND=RKIND), ALLOCATABLE :: vwN(:,:)
 !        Parent shape functions gradient
          REAL(KIND=RKIND), ALLOCATABLE :: Nx(:,:,:)
 !        Second derivatives of shape functions - used for shells & IGA

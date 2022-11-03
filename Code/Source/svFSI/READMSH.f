@@ -50,7 +50,7 @@
       INTEGER(KIND=IKIND) :: i, j, iM, iFa, a, b, Ac, e, lDof, lnNo
       REAL(KIND=RKIND) :: maxX(nsd), minX(nsd), fibN(nsd), rtmp
       CHARACTER(LEN=stdL) :: ctmp, fExt
-      TYPE(listType), POINTER :: lPtr, lPM
+      TYPE(listType), POINTER :: lPtr, lPM, lPtr2
       TYPE(stackType) :: avNds
       TYPE(fileType) :: fTmp
 
@@ -378,6 +378,77 @@ c               END IF
       ELSE
          msh(:)%nFn = 0
       END IF
+
+
+!     Read cell variable wall values
+      flag = .FALSE.
+
+      DO iM=1, nMsh
+         lPM => list%get(msh(iM)%name,"Add mesh",iM)
+         lPtr => lPM%get(cTmp, "Prestress file path")
+         lPtr2 => lPM%get(cTmp, "Prestress file path")
+         IF (ASSOCIATED(lPtr) .AND. ASSOCIATED(lPtr2)) THEN
+            IF (rmsh%isReqd) THEN
+               err = "Variable wall properties "//
+     2            "is not currently allowed with remeshing"
+            END IF
+            flag = .TRUE.
+            useVarWall = .TRUE.
+            std = "Setting varwall flag to true"
+            ALLOCATE(msh(iM)%x(nvwp,msh(iM)%gnNo))
+            msh(iM)%x = 0._RKIND
+            CALL READVTUPDATA(msh(iM), cTmp, "varWallProps", nvwp, 1)
+         END IF
+      END DO
+
+
+
+      DO iM=1, nMsh
+         lPM => list%get(msh(iM)%name,"Add mesh",iM)
+         j = lPM%srch("Fiber direction file path")
+         IF (j .EQ. 0) j = lPM%srch("Fiber direction")
+         IF (j .NE. 0) THEN
+            flag = .TRUE.
+            EXIT
+         END IF
+      END DO
+
+      IF (flag) THEN
+         DO iM=1, nMsh
+            lPM => list%get(msh(iM)%name,"Add mesh",iM)
+
+            msh(iM)%nFn = lPM%srch("Fiber direction file path")
+            IF (msh(iM)%nFn .NE. 0) THEN
+               IF (rmsh%isReqd) err = "Fiber directions read from "//
+     2            "file is not allowed with remeshing"
+               ALLOCATE(msh(iM)%fN(msh(iM)%nFn*nsd,msh(iM)%gnEl))
+               msh(iM)%fN = 0._RKIND
+               DO i=1, msh(iM)%nFn
+                  lPtr => lPM%get(cTmp,
+     2               "Fiber direction file path", i)
+                  IF (ASSOCIATED(lPtr))
+     2               CALL READFIBNFF(msh(iM), cTmp, "FIB_DIR", i)
+               END DO
+            ELSE
+               msh(iM)%nFn = lPM%srch("Fiber direction")
+               IF (msh(iM)%nFn .NE. 0) THEN
+                  ALLOCATE(msh(iM)%fN(msh(iM)%nFn*nsd,msh(iM)%gnEl))
+                  msh(iM)%fN = 0._RKIND
+                  DO i=1, msh(iM)%nFn
+                     lPtr => lPM%get(fibN, "Fiber direction", i)
+                     rtmp = SQRT(NORM(fibN))
+                     IF (.NOT.ISZERO(rtmp)) fibN(:) = fibN(:)/rtmp
+                     DO e=1, msh(iM)%gnEl
+                        msh(iM)%fN((i-1)*nsd+1:i*nsd,e) = fibN(1:nsd)
+                     END DO
+                  END DO
+               END IF
+            END IF
+         END DO
+      ELSE
+         msh(:)%nFn = 0
+      END IF
+
 
 !     Read prestress data
       flag = .FALSE.

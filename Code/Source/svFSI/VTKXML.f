@@ -281,51 +281,6 @@
 
       RETURN
       END SUBROUTINE READVTUPDATA
-!--------------------------------------------------------------------
-!     Read a particular point dataset from a vtp file. Point data will
-!     be read and stored in lFa%x array
-      SUBROUTINE READVTPPDATA(lFa, fName, kwrd, m, idx)
-      USE COMMOD
-      USE LISTMOD
-      USE ALLFUN
-      USE vtkXMLMod
-      IMPLICIT NONE
-      TYPE(faceType), INTENT(INOUT) :: lFa
-      INTEGER(KIND=IKIND), INTENT(IN) :: m, idx
-      CHARACTER(LEN=*) :: fName, kwrd
-
-      INTEGER(KIND=IKIND) :: iStat, a
-      TYPE(vtkXMLType) :: vtp
-
-      REAL(KIND=RKIND), ALLOCATABLE :: tmpR(:,:)
-
-      iStat = 0
-      std = " <VTK XML Parser> Loading file <"//TRIM(fName)//">"
-      CALL loadVTK(vtp, fName, iStat)
-      IF (iStat .LT. 0) err = "VTP file read error (init)"
-
-      CALL getVTK_numPoints(vtp, a, iStat)
-      IF (a .NE. lFa%nNo) err = "Mismatch in num points for "//
-     2   TRIM(kwrd)
-
-      IF (m .EQ. nsd) THEN
-         ALLOCATE(tmpR(maxNSD,lFa%nNo))
-         tmpR = 0._RKIND
-         CALL getVTK_pointData(vtp, TRIM(kwrd), tmpR, iStat)
-         IF (iStat .LT. 0) err = "VTP file read error "//TRIM(kwrd)
-         DO a=1, lFa%nNo
-            lFa%x((idx-1)*nsd+1:idx*nsd,a) = tmpR(1:nsd,a)
-         END DO
-         DEALLOCATE(tmpR)
-      ELSE
-         CALL getVTK_pointData(vtp, TRIM(kwrd), lFa%x, iStat)
-         IF (iStat .LT. 0) err = "VTU file read error "//TRIM(kwrd)
-      END IF
-
-      CALL flushVTK(vtp)
-
-      RETURN
-      END SUBROUTINE READVTPPDATA
 !####################################################################
       SUBROUTINE WRITEVTU(lM, fName)
       USE COMMOD
