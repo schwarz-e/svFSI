@@ -844,6 +844,8 @@
       LOGICAL cmmInit
 !     Whether variable wall properties are used for CMM
       LOGICAL cmmVarWall
+!     Whether cell variable wall properties are used
+      LOGICAL useVarWall
 !     Whether shell equation is being solved
       LOGICAL shlEq
 !     Whether PRESTRESS is being solved

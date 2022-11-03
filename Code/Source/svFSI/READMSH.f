@@ -382,11 +382,12 @@ c               END IF
 
 !     Read cell variable wall values
       flag = .FALSE.
-
       DO iM=1, nMsh
          lPM => list%get(msh(iM)%name,"Add mesh",iM)
-         lPtr => lPM%get(cTmp, "Prestress file path")
-         lPtr2 => lPM%get(cTmp, "Prestress file path")
+         lPtr => lPM%get(cTmp, "Variable wall properties file path")
+         lPtr2 => lPM%get(msh(iM)%nvw,
+     2      "Number of variable wall properties")
+
          IF (ASSOCIATED(lPtr) .AND. ASSOCIATED(lPtr2)) THEN
             IF (rmsh%isReqd) THEN
                err = "Variable wall properties "//
@@ -394,60 +395,12 @@ c               END IF
             END IF
             flag = .TRUE.
             useVarWall = .TRUE.
-            std = "Setting varwall flag to true"
-            ALLOCATE(msh(iM)%x(nvwp,msh(iM)%gnNo))
-            msh(iM)%x = 0._RKIND
-            CALL READVTUPDATA(msh(iM), cTmp, "varWallProps", nvwp, 1)
+            std = " Setting cell variable wall flag to true"
+            ALLOCATE(msh(iM)%vwN(msh(iM)%nvw,msh(iM)%gnEl))
+            msh(iM)%vwN = 0._RKIND
+            CALL READVTUCDATA(msh(iM), cTmp, "varWallProps")
          END IF
       END DO
-
-
-
-      DO iM=1, nMsh
-         lPM => list%get(msh(iM)%name,"Add mesh",iM)
-         j = lPM%srch("Fiber direction file path")
-         IF (j .EQ. 0) j = lPM%srch("Fiber direction")
-         IF (j .NE. 0) THEN
-            flag = .TRUE.
-            EXIT
-         END IF
-      END DO
-
-      IF (flag) THEN
-         DO iM=1, nMsh
-            lPM => list%get(msh(iM)%name,"Add mesh",iM)
-
-            msh(iM)%nFn = lPM%srch("Fiber direction file path")
-            IF (msh(iM)%nFn .NE. 0) THEN
-               IF (rmsh%isReqd) err = "Fiber directions read from "//
-     2            "file is not allowed with remeshing"
-               ALLOCATE(msh(iM)%fN(msh(iM)%nFn*nsd,msh(iM)%gnEl))
-               msh(iM)%fN = 0._RKIND
-               DO i=1, msh(iM)%nFn
-                  lPtr => lPM%get(cTmp,
-     2               "Fiber direction file path", i)
-                  IF (ASSOCIATED(lPtr))
-     2               CALL READFIBNFF(msh(iM), cTmp, "FIB_DIR", i)
-               END DO
-            ELSE
-               msh(iM)%nFn = lPM%srch("Fiber direction")
-               IF (msh(iM)%nFn .NE. 0) THEN
-                  ALLOCATE(msh(iM)%fN(msh(iM)%nFn*nsd,msh(iM)%gnEl))
-                  msh(iM)%fN = 0._RKIND
-                  DO i=1, msh(iM)%nFn
-                     lPtr => lPM%get(fibN, "Fiber direction", i)
-                     rtmp = SQRT(NORM(fibN))
-                     IF (.NOT.ISZERO(rtmp)) fibN(:) = fibN(:)/rtmp
-                     DO e=1, msh(iM)%gnEl
-                        msh(iM)%fN((i-1)*nsd+1:i*nsd,e) = fibN(1:nsd)
-                     END DO
-                  END DO
-               END IF
-            END IF
-         END DO
-      ELSE
-         msh(:)%nFn = 0
-      END IF
 
 
 !     Read prestress data
@@ -926,6 +879,44 @@ c               END IF
 
       RETURN
       END SUBROUTINE READFIBNFF
+!####################################################################
+!     Read fiber direction from a vtu file
+      SUBROUTINE READVTUCDATA(lM, fName, kwrd)
+      USE COMMOD
+      USE LISTMOD
+      USE ALLFUN
+      USE vtkXMLMod
+      IMPLICIT NONE
+      TYPE(mshType), INTENT(INOUT) :: lM
+      CHARACTER(LEN=*) :: fName, kwrd
+
+      INTEGER(KIND=IKIND) :: iStat, e
+      TYPE(vtkXMLType) :: vtu
+
+      REAL(KIND=RKIND), ALLOCATABLE :: tmpR(:,:)
+
+      iStat = 0;
+      std = " <VTK XML Parser> Loading file <"//TRIM(fName)//">"
+      CALL loadVTK(vtu, fName, iStat)
+      IF (iStat .LT. 0) err = "VTU file read error (init)"
+
+      CALL getVTK_numElems(vtu, e, iStat)
+      IF (e .NE. lM%gnEl) err = "Mismatch in num elems for "//
+     2   TRIM(kwrd)
+
+      ALLOCATE(tmpR(lM%nvw,lM%gnEl))
+      tmpR = 0._RKIND
+      CALL getVTK_elemData(vtu, TRIM(kwrd), tmpR, iStat)
+      IF (iStat .LT. 0) err = "VTU file read error "//TRIM(kwrd)
+      DO e=1, lM%gnEl
+         lM%vwN(1:lM%nvw,e) = tmpR(1:lM%nvw,e)
+      END DO
+      DEALLOCATE(tmpR)
+
+      CALL flushVTK(vtu)
+
+      RETURN
+      END SUBROUTINE READVTUCDATA
 !####################################################################
 !     Check the mesh IEN structure and ordering
       SUBROUTINE CHECKIEN(lM)

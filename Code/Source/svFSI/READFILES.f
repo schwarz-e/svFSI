@@ -97,6 +97,7 @@
          pstEq        = .FALSE.
          sstEq        = .FALSE.
          ibFlag       = .FALSE.
+         useVarWall   = .FALSE.
 
          i = IARGC()
          IF (i .NE. 0) THEN
@@ -510,14 +511,24 @@
       CASE ('struct')
          lEq%phys = phys_struct
 
-         propL(1,1) = solid_density
-         propL(2,1) = damping
-         propL(3,1) = elasticity_modulus
-         propL(4,1) = poisson_ratio
-         propL(5,1) = solid_viscosity
-         propL(6,1) = f_x
-         propL(7,1) = f_y
-         IF (nsd .EQ. 3) propL(8,1) = f_z
+         IF (useVarWall) THEN
+            propL(1,1) = solid_density
+            propL(2,1) = damping
+            propL(3,1) = f_x
+            propL(4,1) = f_y
+            propL(5,1) = solid_viscosity
+            IF (nsd .EQ. 3) propL(6,1) = f_z
+         ELSE
+            propL(1,1) = solid_density
+            propL(2,1) = damping
+            propL(3,1) = elasticity_modulus
+            propL(4,1) = poisson_ratio
+            propL(5,1) = solid_viscosity
+            propL(6,1) = f_x
+            propL(7,1) = f_y
+            IF (nsd .EQ. 3) propL(8,1) = f_z
+         END IF
+
          CALL READDOMAIN(lEq, propL, list)
 
          lPtr => list%get(pstEq, "Prestress")
@@ -726,14 +737,24 @@
          IF (nsd .EQ. 3) propL(5,1) = f_z
 
 !        struct properties
-         propL(1,2) = solid_density
-         propL(2,2) = elasticity_modulus
-         propL(3,2) = poisson_ratio
-         propL(4,2) = damping
-         propL(5,2) = solid_viscosity
-         propL(6,2) = f_x
-         propL(7,2) = f_y
-         IF (nsd .EQ. 3) propL(8,2) = f_z
+         IF (useVarWall) THEN
+!           struct properties                                                                                                                                                                                
+            propL(1,2) = solid_density
+            propL(2,2) = damping
+            propL(3,2) = solid_viscosity
+            propL(4,2) = f_x
+            propL(5,2) = f_y
+            IF (nsd .EQ. 3) propL(6,2) = f_z
+         ELSE
+            propL(1,2) = solid_density
+            propL(2,2) = elasticity_modulus
+            propL(3,2) = poisson_ratio
+            propL(4,2) = damping
+            propL(5,2) = solid_viscosity
+            propL(6,2) = f_x
+            propL(7,2) = f_y
+            IF (nsd .EQ. 3) propL(8,2) = f_z
+         END IF
 
 !        ustruct properties
          propL(1,3) = solid_density
@@ -2509,9 +2530,23 @@ c     2         "can be applied for Neumann boundaries only"
          lPtr => lSt%get(lDmn%stM%bfs, "bfs")
          lPtr => lSt%get(lDmn%stM%khs, "k")
 
+      CASE ("anisotropic", "Anisotropic")
+      ! Anisotropic linear hyperelasticity !
+         lDmn%stM%isoType = stIso_aniso
+
+      CASE ("mixed", "Mixed", "mm")
+      ! Anisotropic linear hyperelasticity !
+         lDmn%stM%isoType = stIso_mix
+
       CASE DEFAULT
          err = "Undefined constitutive model used"
       END SELECT
+
+
+      IF ((lDmn%stM%isoType .NE. stIso_mix) .AND.
+     2    (lDmn%stM%isoType .NE. stIso_aniso) .AND. useVarWall) THEN
+         err = "Must use mix or aniso materials with variable wall"
+      END IF
 
 !     Fiber reinforcement stress
       lFib => lPD%get(ctmp, "Fiber reinforcement stress")

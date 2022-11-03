@@ -1211,6 +1211,7 @@
       lM%nFa   = 0
       lM%nNo   = 0
       lM%nFn   = 0
+      lM%nvw   = 0
 
       RETURN
       END SUBROUTINE DESTROYMSH

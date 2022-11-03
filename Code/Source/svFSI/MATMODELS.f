@@ -38,13 +38,14 @@
 
 !     Compute 2nd Piola-Kirchhoff stress and material stiffness tensors
 !     including both dilational and isochoric components
-      SUBROUTINE GETPK2CC(lDmn, F, nfd, fl, ya, S, Dm)
+      SUBROUTINE GETPK2CC(lDmn, F, nfd, fl, ya, S, Dm, nvw, vwN)
       USE MATFUN
       USE COMMOD
       IMPLICIT NONE
       TYPE(dmnType), INTENT(IN) :: lDmn
-      INTEGER(KIND=IKIND), INTENT(IN) :: nfd
-      REAL(KIND=RKIND), INTENT(IN) :: F(nsd,nsd), fl(nsd,nfd), ya
+      INTEGER(KIND=IKIND), INTENT(IN) :: nfd, nvw
+      REAL(KIND=RKIND), INTENT(IN) :: F(nsd,nsd), fl(nsd,nfd), ya,
+     2   vwN(nvw)
       REAL(KIND=RKIND), INTENT(OUT) :: S(nsd,nsd), Dm(nsymd,nsymd)
 
       TYPE(stModelType) :: stM
@@ -58,11 +59,26 @@
 !     HGO/HO model
       REAL(KIND=RKIND) :: Eff, Ess, Efs, fsn, kap, c4f, c4s, dc4f, dc4s,
      2   Hff(nsd,nsd), Hss(nsd,nsd), Hfs(nsd,nsd)
+
+!     MM model                                                                                                                                                                                               
+      REAL(KIND=RKIND) :: CCi(nsd,nsd,nsd,nsd), rRa, rhah, vFa,
+     5   Si(nsd,nsd), fdir(nsd), gan, lam0, lamm, vaff, vbff, fTact,
+     6   p1,p2,p3,Q(nsd,nsd),Fps(nsd,nsd),f1(nsd),f2(nsd),f3(nsd)
+      INTEGER(KIND=IKIND) :: i, nIso, nVars, nAct, nAni
+
+!     Aniso model                                                                                                                                                                                            
+      REAL(KIND=RKIND) :: DD(6,6)
+!     Variable penalty                                                                                                                                                                                       
+      REAL(KIND=RKIND) :: dV,dV2d
+
 !     Active strain for electromechanics
       REAL(KIND=RKIND) :: Fe(nsd,nsd), Fa(nsd,nsd), Fai(nsd,nsd)
 
       S    = 0._RKIND
       Dm   = 0._RKIND
+      CC   = 0._RKIND
+      Fps  = 0._RKIND
+      Q    = 0._RKIND
 
 !     Some preliminaries
       stM  = lDmn%stM
@@ -101,7 +117,15 @@
 !     Contribution of dilational penalty terms to S and CC
       p  = 0._RKIND
       pl = 0._RKIND
-      IF (.NOT.ISZERO(Kp)) CALL GETSVOLP(stM, J, p, pl)
+
+      IF (stM%isoType .EQ. stISo_aniso) THEN
+         dV = vwN(38)
+         dV2d  = dV**(-2._RKIND/nd)
+         p  = Kp*(1._RKIND/dV - 1._RKIND/J)
+         pl = Kp/dV
+      ELSE 
+         IF (.NOT.ISZERO(Kp)) CALL GETSVOLP(stM, J, p, pl)
+      END IF
 
 !     Now, compute isochoric and total stress, elasticity tensors
       SELECT CASE (stM%isoType)
@@ -143,6 +167,184 @@
          S  = S + p*J*Ci
          CC = CC + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd) +
      2         (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+!     Anisotropic linear hyperelasticity
+      CASE (stIso_aniso)
+         DD(1,:) = vwN(1:6)
+         DD(2,:) = vwN(7:12)
+         DD(3,:) = vwN(13:18)
+         DD(4,:) = vwN(19:24)
+         DD(5,:) = vwN(25:30)
+         DD(6,:) = vwN(31:36)
+
+         g1 = vwN(37)
+
+         CALL VOIGTTOCC(CCb, DD)
+!        Compute isochoric component of E
+         E = 0.5_RKIND * ((J2d/dV2d)*C - Idm)
+         Sb = TEN_MDDOT(CCb, E, nsd)
+
+         r1  = (J2d/dV2d)*MAT_DDOT(C, Sb, nsd) / nd
+         S   = (J2d/dV2d)*Sb - r1*Ci
+
+         CCb = ((J2d/dV2d)**2)*CCb
+
+         PP  = TEN_IDs(nsd) - (1._RKIND/nd) * TEN_DYADPROD(Ci, C, nsd)
+         CC  = TEN_DDOT(CCb, PP, nsd)
+         CC  = TEN_TRANSPOSE(CC, nsd)
+         CC  = TEN_DDOT(PP, CC, nsd)
+         CC  = CC - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, S, nsd) +
+     2                           TEN_DYADPROD(S, Ci, nsd) )
+
+         S   = S + (p+g1)*J*Ci
+         
+         CC  = CC + 2._RKIND*(r1 - (p+g1)*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2         +((pl+g1)*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+
+!     MM (Mixed Mixture Model) four fiber family
+      CASE (stIso_mix)
+         IF (.NOT. useVarWall) err = "Need defined variable "//
+     2      "wall properties to use mixture model"
+
+!        Number of collagen constituents
+         nVars= 14
+         nIso= 1
+         nAni= 5
+         nAct= 0
+
+         DO i=1,nIso
+!           volR_alpha
+            vFa = vwN(1+(i-1)*nVars)
+            p1 = vwN(2+(i-1)*nVars)
+            p2 = vwN(3+(i-1)*nVars)
+            p3 = vwN(4+(i-1)*nVars)
+            g1 = vwN(5+(i-1)*nVars)
+
+            f1 = vwN(6+(i-1)*nVars:8+(i-1)*nVars)
+            f2 = vwN(9+(i-1)*nVars:11+(i-1)*nVars)
+            f3 = vwN(12+(i-1)*nVars:14+(i-1)*nVars)
+
+            Q(1,1:3) = f1
+            Q(2,1:3) = f2
+            Q(3,1:3) = f3
+
+            Fps(1,1) = p1
+            Fps(2,2) = p2
+            Fps(3,3) = p3
+
+            Fps = MATMUL(TRANSPOSE(Q),MATMUL(Fps,Q))
+
+            Sb = g1*MATMUL(Fps,TRANSPOSE(Fps))
+
+            r1 = J2d*MAT_DDOT(C, Sb, nsd) / nd
+            Si  = J2d*Sb - r1*Ci
+
+            CCi  = - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
+     2                           TEN_DYADPROD(Si, Ci, nsd) )
+
+            Si   = Si + p*J*Ci
+            CCi  = CCi + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2          + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+
+            S = S + vFa*Si
+            CC = CC + vFa*CCi
+
+         END DO
+
+         DO i = 1,nAni
+
+!           volR_alpha
+            vFa  = vwN(1+(nIso + i-1)*nVars)
+!           Prestretch    
+            gan  = vwN(2+(nIso + i-1)*nVars)
+!           First material model property
+            vaff = vwN(3+(nIso + i - 1)*nVars)
+!           Second material model property
+            vbff = vwN(4+(nIso + i - 1)*nVars)
+!           Fiber direction
+            fdir = vwN(5+(nIso + i - 1)*nVars:
+     2             7+(nIso + i - 1)*nVars)
+
+            vaff = vaff/2._RKIND
+
+            Inv4 = J2d*NORM(fdir, MATMUL(C, fdir))
+
+            Eff  = Inv4*gan*gan - 1._RKIND
+
+            Hff  = MAT_DYADPROD(fdir, fdir, nsd)
+
+            g1   = vaff * Eff*gan*gan * EXP(vbff*Eff*Eff)
+
+            Sb   = 2._RKIND*(g1*Hff)
+
+            g1   = vaff*(1._RKIND + 2._RKIND*vbff*Eff*Eff) *
+     2         EXP(vbff*Eff*Eff) *gan*gan*gan*gan
+            g1   = 4._RKIND*J4d*g1
+
+            CCb  = g1 * TEN_DYADPROD(Hff, Hff, nsd)
+
+            r1  = J2d*MAT_DDOT(C, Sb, nsd) / nd
+            Si   = J2d*Sb - r1*Ci
+
+            PP  = TEN_IDs(nsd) - (1._RKIND/nd) *
+     2          TEN_DYADPROD(Ci, C, nsd)
+
+            CCi  = TEN_DDOT(CCb, PP, nsd)
+            CCi  = TEN_TRANSPOSE(CCi, nsd)
+            CCi  = TEN_DDOT(PP, CCi, nsd)
+            CCi  = CCi - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
+     2                           TEN_DYADPROD(Si, Ci, nsd) )
+
+            Si   = Si + p*J*Ci
+            CCi  = CCi + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2          + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+
+            S = S + vFa*Si
+            CC = CC + vFa*CCi
+
+         END DO
+         DO i = 1,nAct
+
+            vFa   = vwN(1+(nIso + nAct + i-1)*nVars)
+            fTact = vwN(2+(nIso + nAct + i-1)*nVars)
+            lamm  = vwN(3+(nIso + nAct + i-1)*nVars)
+            lam0  = vwN(4+(nIso + nAct + i-1)*nVars)
+            fdir  = vwN(5+(nIso + nAct + i-1)*nVars:
+     2              7+(nIso + nAct + i-1)*nVars)
+
+            Inv4 = J2d*NORM(fdir, MATMUL(C, fdir))
+            Hff  = MAT_DYADPROD(fdir, fdir, nsd)
+
+!           CMM fiber reinforcement/active stress
+            Sb  = fTact*(Inv4**-0.5)*MAT_DYADPROD(fdir, fdir, nsd)*(1 -
+     2               ((lamm - Inv4**0.5)/(lamm - lam0))**2)
+
+            r1  = J2d*MAT_DDOT(C, Sb, nsd) / nd
+            Si  = J2d*Sb - r1*Ci
+
+            PP  = TEN_IDs(nsd) - (1._RKIND/nd) *
+     2          TEN_DYADPROD(Ci, C, nsd)
+
+            CCi  = TEN_DDOT(CCb, PP, nsd)
+            CCi  = TEN_TRANSPOSE(CCi, nsd)
+            CCi  = TEN_DDOT(PP, CCi, nsd)
+            CCi  = CCi - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, Si, nsd) +
+     2                           TEN_DYADPROD(Si, Ci, nsd) )
+
+            Si   = Si + p*J*Ci
+            CCi  = CCi + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2          + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
+
+            S = S + vFa*Si
+            CC = CC + vFa*CCi
+
+         END DO
+
+
 
 !     Mooney-Rivlin model
       CASE (stIso_MR)
@@ -1130,9 +1332,7 @@ c     2      (EXP(stM%khs*Ess) + EXP(-stM%khs*Ess) + 2.0_RKIND)
       IMPLICIT NONE
       REAL(KIND=RKIND), INTENT(IN) :: CC(nsd,nsd,nsd,nsd)
       REAL(KIND=RKIND), INTENT(INOUT) :: Dm(nsymd,nsymd)
-
       INTEGER i, j
-
       IF (nsd .EQ. 3) THEN
          Dm(1,1) = CC(1,1,1,1)
          Dm(1,2) = CC(1,1,2,2)
@@ -1140,51 +1340,80 @@ c     2      (EXP(stM%khs*Ess) + EXP(-stM%khs*Ess) + 2.0_RKIND)
          Dm(1,4) = CC(1,1,1,2)
          Dm(1,5) = CC(1,1,2,3)
          Dm(1,6) = CC(1,1,3,1)
-
+         Dm(2,1) = CC(2,2,1,1)
          Dm(2,2) = CC(2,2,2,2)
          Dm(2,3) = CC(2,2,3,3)
          Dm(2,4) = CC(2,2,1,2)
          Dm(2,5) = CC(2,2,2,3)
          Dm(2,6) = CC(2,2,3,1)
-
+         Dm(3,1) = CC(3,3,1,1)
+         Dm(3,2) = CC(3,3,2,2)
          Dm(3,3) = CC(3,3,3,3)
          Dm(3,4) = CC(3,3,1,2)
          Dm(3,5) = CC(3,3,2,3)
          Dm(3,6) = CC(3,3,3,1)
-
+         
+         Dm(4,1) = CC(1,2,1,1)
+         Dm(4,2) = CC(1,2,2,2)
+         Dm(4,3) = CC(1,2,3,3)
          Dm(4,4) = CC(1,2,1,2)
          Dm(4,5) = CC(1,2,2,3)
          Dm(4,6) = CC(1,2,3,1)
-
+         Dm(5,1) = CC(2,3,1,1)
+         Dm(5,2) = CC(2,3,2,2)
+         Dm(5,3) = CC(2,3,3,3)
+         Dm(5,4) = CC(2,3,1,2)
          Dm(5,5) = CC(2,3,2,3)
          Dm(5,6) = CC(2,3,3,1)
-
+         
+         Dm(6,1) = CC(3,1,1,1)
+         Dm(6,2) = CC(3,1,2,2)
+         Dm(6,3) = CC(3,1,3,3)
+         Dm(6,4) = CC(3,1,1,2)
+         Dm(6,5) = CC(3,1,2,3)
          Dm(6,6) = CC(3,1,3,1)
-
-         DO i=2, 6
-            DO j=1, i-1
-               Dm(i,j) = Dm(j,i)
-            END DO
-         END DO
-
       ELSE IF (nsd .EQ. 2) THEN
          Dm(1,1) = CC(1,1,1,1)
          Dm(1,2) = CC(1,1,2,2)
          Dm(1,3) = CC(1,1,1,2)
-
+         Dm(2,1) = CC(2,2,1,1)
          Dm(2,2) = CC(2,2,2,2)
          Dm(2,3) = CC(2,2,1,2)
-
+         Dm(3,1) = CC(1,2,1,1)
+         Dm(3,2) = CC(1,2,2,2)
          Dm(3,3) = CC(1,2,1,2)
-
-         Dm(2,1) = Dm(1,2)
-         Dm(3,1) = Dm(1,3)
-         Dm(3,2) = Dm(2,3)
-
+         
       END IF
-
       RETURN
       END SUBROUTINE CCTOVOIGT
+
+!####################################################################
+!     Convert elasticity tensor to Voigt notation
+      SUBROUTINE VOIGTTOCC(CC, Dm)
+      USE COMMOD, ONLY : RKIND, IKIND, nsd, nsymd
+      IMPLICIT NONE
+      REAL(KIND=RKIND), INTENT(INOUT) :: CC(nsd,nsd,nsd,nsd)
+      REAL(KIND=RKIND), INTENT(IN) :: Dm(nsymd,nsymd)
+      INTEGER(KIND=IKIND) VgtMap(3,3)
+      INTEGER i, j, k, l, p, q
+      VgtMap = RESHAPE((/ 1, 4, 6, 4, 2, 5, 6, 5, 3/), SHAPE(VgtMap))
+      IF (nsd .EQ. 3) THEN
+         DO i = 1,3
+            DO j = 1,3
+               DO k = 1,3
+                  DO l = 1,3
+                     p = VgtMap(i,j)
+                     q = VgtMap(k,l)
+                     CC(i,j,k,l) = Dm(p, q)
+                  END DO
+               END DO
+            END DO 
+         END DO
+      END IF
+!     TODO: Add for 2D
+      RETURN
+      END SUBROUTINE VOIGTTOCC
+
 !####################################################################
 !     Compute additional fiber-reinforcement stress
       SUBROUTINE GETFIBSTRESS(Tfl, g)

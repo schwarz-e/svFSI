@@ -517,7 +517,7 @@
 
       LOGICAL flag
       INTEGER(KIND=IKIND) a, e, g, Ac, i, j, k, l, cPhys, insd,
-     2   nFn
+     2   nFn, nvw
       REAL(KIND=RKIND) w, Jac, detF, Je, ya, Ja, elM, nu, lambda, mu,
      2   p, trS, vmises, xi(nsd), xi0(nsd), xp(nsd), ed(nsymd),
      3   Im(nsd,nsd), F(nsd,nsd), C(nsd,nsd), Eg(nsd,nsd), P1(nsd,nsd),
@@ -526,14 +526,16 @@
 
       INTEGER, ALLOCATABLE :: eNds(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), dl(:,:), yl(:,:),
-     2   fN(:,:), resl(:), Nx(:,:), N(:), sA(:), sF(:,:), sE(:)
+     2   fN(:,:), resl(:), Nx(:,:), N(:), sA(:), sF(:,:), sE(:), vwN(:)
 
       dof  = eq(iEq)%dof
       i    = eq(iEq)%s
       j    = i + 1
       k    = j + 1
       nFn  = lM%nFn
+      nvw  = lM%nvw
       IF (nFn .EQ. 0) nFn = 1
+      IF (nvw .EQ. 0) nvw = 1
 
 !     For higher order elements, we lower the order of shape functions
 !     to compute the quantities at corner nodes of elements. We then
@@ -555,7 +557,7 @@
 
       ALLOCATE (sA(tnNo), sF(m,tnNo), sE(lM%nEl), xl(nsd,fs%eNoN),
      2   dl(tDof,fs%eNoN), yl(tDof,fs%eNoN), fN(nsd,nFn), resl(m),
-     3   Nx(nsd,fs%eNoN), N(fs%eNoN))
+     3   Nx(nsd,fs%eNoN), N(fs%eNoN), vwN(nvw))
 
       sA   = 0._RKIND
       sF   = 0._RKIND
@@ -580,11 +582,15 @@
 
          IF (lM%eType .EQ. eType_NRB) CALL NRBNNX(lM, e)
 
-         fN = 0._RKIND
+         fN  = 0._RKIND
+         vwN = 0._RKIND
          IF (ALLOCATED(lM%fN)) THEN
             DO l=1, nFn
                fN(:,l) = lM%fN((l-1)*nsd+1:l*nsd,e)
             END DO
+         END IF
+         IF (ALLOCATED(lM%vwN)) THEN
+            vwN(:) = lM%vwN(:,e)
          END IF
 
          dl = 0._RKIND
@@ -734,7 +740,8 @@
                   IF (.NOT.ISZERO(detF)) sigma(:,:) = sigma(:,:) / detF
 
                ELSE IF (cPhys .EQ. phys_struct) THEN
-                  CALL GETPK2CC(eq(iEq)%dmn(cDmn), F, nFn, fN, ya, S,Dm)
+                  CALL GETPK2CC(eq(iEq)%dmn(cDmn), F, nFn, fN, ya, S, 
+     2                Dm, nvw, vwN)
                   P1 = MATMUL(F, S)
                   sigma = MATMUL(P1, TRANSPOSE(F))
                   IF (.NOT.ISZERO(detF)) sigma(:,:) = sigma(:,:) / detF
@@ -770,6 +777,7 @@
                      resl(2) = sigma(2,2)
                      resl(3) = sigma(1,2)
                   END IF
+                  sE(e)   = sE(e) + w*(sigma(1,1)+sigma(2,2)+sigma(3,3))
 
 !              Von Mises stress
                ELSE IF (outGrp .EQ. outGrp_mises) THEN
