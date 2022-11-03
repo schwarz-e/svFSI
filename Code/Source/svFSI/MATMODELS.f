@@ -197,6 +197,18 @@
      2                           TEN_DYADPROD(S, Ci, nsd) )
 
          S   = S + (p+g1)*J*Ci
+
+         S(1,1) = S(1,1) + vwN(39)
+         S(2,2) = S(2,2) + vwN(40)
+         S(3,3) = S(3,3) + vwN(41)
+         
+         S(1,2) = S(1,2) + vwN(42)
+         S(2,3) = S(2,3) + vwN(43)
+         S(3,1) = S(3,1) + vwN(44)
+
+         S(2,1) = S(2,1) + vwN(42)
+         S(3,2) = S(3,2) + vwN(43)
+         S(1,3) = S(1,3) + vwN(44)
          
          CC  = CC + 2._RKIND*(r1 - (p+g1)*J) * TEN_SYMMPROD(Ci, Ci, nsd)
      2         +((pl+g1)*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
