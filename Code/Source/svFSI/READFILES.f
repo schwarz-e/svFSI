@@ -2530,7 +2530,7 @@ c     2         "can be applied for Neumann boundaries only"
          lPtr => lSt%get(lDmn%stM%bfs, "bfs")
          lPtr => lSt%get(lDmn%stM%khs, "k")
 
-      CASE ("anisotropic", "Anisotropic")
+      CASE ("anisotropic", "Anisotropic", "aniso", "Aniso")
       ! Anisotropic linear hyperelasticity !
          lDmn%stM%isoType = stIso_aniso
 
