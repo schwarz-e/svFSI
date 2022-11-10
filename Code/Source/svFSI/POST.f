@@ -332,24 +332,19 @@
       REAL(KIND=RKIND), INTENT(OUT) :: res(maxnsd,lM%nNo), resE(lM%nEl)
       REAL(KIND=RKIND), INTENT(IN) :: lY(tDof,tnNo), lD(tDof,tnNo)
       INTEGER(KIND=IKIND), INTENT(IN) :: outGrp
-
       LOGICAL FSIeq
       INTEGER(KIND=IKIND) a, Ac, e, Ec, i, j, iEq, iFa, eNoN, g
       REAL(KIND=RKIND) Tdn(nsd), ndTdn, taue(nsd), ux(nsd,nsd), mu, w,
      2   nV(nsd), Jac, ks(nsd,nsd), lRes(maxnsd), p, gam, mu_s
       TYPE(fsType) :: fsP
-
       REAL(KIND=RKIND), ALLOCATABLE :: sA(:), sF(:,:), gnV(:,:),
      2   lnV(:,:), xl(:,:), ul(:,:), pl(:), N(:), Nx(:,:), enV(:)
-
       IF (outGrp.NE.outGrp_WSS .AND. outGrp.NE.outGrp_trac) err =
      2   "Invalid output group. Correction is required in BPOST"
-
       iEq   = 1
       eNoN  = lM%eNoN
       FSIeq = .FALSE.
       IF (eq(iEq)%phys .EQ. phys_FSI) FSIeq = .TRUE.
-
       ALLOCATE (sA(tnNo), sF(maxnsd,tnNo), xl(nsd,eNoN), ul(nsd,eNoN),
      2   gnV(nsd,tnNo), lnV(nsd,eNoN), N(eNoN), Nx(nsd,eNoN), enV(nsd))
       sA   = 0._RKIND
@@ -357,7 +352,6 @@
       gnV  = 0._RKIND
       enV  = 0._RKIND
       lRes = 0._RKIND
-
 !     First creating the norm field
       DO iFa=1, lM%nFa
          DO a=1, lM%fa(iFa)%nNo
@@ -365,7 +359,6 @@
             gnV(:,Ac) = lM%fa(iFa)%nV(:,a)
          END DO
       END DO
-
 !     Update pressure function spaces
       IF (lM%nFs .EQ. 1) THEN
          fsP%nG    = lM%fs(1)%nG
@@ -388,7 +381,6 @@
          END DO
       END IF
       ALLOCATE(pl(fsP%eNoN))
-
 !     fixme: have user indicate what boundary face is?
 !      DO iFa=1, lM%nFa
       DO iFa=1, 1
@@ -399,7 +391,6 @@
             IF (lM%eType .EQ. eType_NRB) CALL NRBNNX(lM, Ec)
 !     Get element normal
             enV(:) = lM%fa(iFa)%enV(:,e)
-
 !     Finding the norm for all the nodes of this element, including
 !     those that don't belong to this face, which will be inerpolated
 !     from the nodes of the face
@@ -783,12 +774,13 @@
                      resl(4) = sigma(1,2)
                      resl(5) = sigma(2,3)
                      resl(6) = sigma(3,1)
+                     sE(e)=sE(e)+w*(sigma(1,1)+sigma(2,2)+sigma(3,3))
                   ELSE
                      resl(1) = sigma(1,1)
                      resl(2) = sigma(2,2)
                      resl(3) = sigma(1,2)
+                     sE(e)=sE(e)+w*(sigma(1,1)+sigma(2,2))
                   END IF
-                  sE(e)   = sE(e) + w*(sigma(1,1)+sigma(2,2)+sigma(3,3))
 
 !              Von Mises stress
                ELSE IF (outGrp .EQ. outGrp_mises) THEN

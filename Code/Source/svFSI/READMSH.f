@@ -399,6 +399,8 @@ c               END IF
             ALLOCATE(msh(iM)%vwN(msh(iM)%nvw,msh(iM)%gnEl))
             msh(iM)%vwN = 0._RKIND
             CALL READVTUCDATA(msh(iM), cTmp, "varWallProps")
+         ELSE
+            msh(iM)%nvw = 0
          END IF
       END DO
 

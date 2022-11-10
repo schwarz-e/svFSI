@@ -427,6 +427,7 @@
       fnFlag = ALLOCATED(lM%fN)
       vwFlag = ALLOCATED(lM%vwN)
       CALL cm%bcast(fnFlag)
+      CALL cm%bcast(vwFlag)
 
       IF (cm%slv()) THEN
          lM%nNo = lM%gnNo
