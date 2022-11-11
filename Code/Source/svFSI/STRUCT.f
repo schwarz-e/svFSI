@@ -50,8 +50,7 @@
       INTEGER(KIND=IKIND), ALLOCATABLE :: ptr(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), al(:,:), yl(:,:),
      2   dl(:,:), bfl(:,:), fN(:,:), pS0l(:,:), pSl(:), ya_l(:), N(:),
-     3   Nx(:,:), lR(:,:), lK(:,:,:), vwN(:), vwNo(:,:), vwNole(:,:),
-     4   vwCn(:)
+     3   Nx(:,:), lR(:,:), lK(:,:,:), vwN(:)
 
       eNoN = lM%eNoN
       nFn  = lM%nFn
@@ -64,24 +63,7 @@
       ALLOCATE(ptr(eNoN), xl(nsd,eNoN), al(tDof,eNoN), yl(tDof,eNoN),
      2   dl(tDof,eNoN), bfl(nsd,eNoN), fN(nsd,nFn), pS0l(nsymd,eNoN),
      3   pSl(nsymd), ya_l(eNoN), N(eNoN), Nx(nsd,eNoN), lR(dof,eNoN),
-     4   lK(dof*dof,eNoN,eNoN), vwN(nvw), vwNo(nvw,tnNo),
-     5   vwNole(nvw,eNoN), vwCn(tnNo))
-
-      vwNo = 0._RKIND
-      vwCn = 0._RKIND
-      IF (ALLOCATED(lM%vwN)) THEN
-!     Loop over all elements of mesh
-         DO e=1, lM%nEl
-            cDmn  = DOMAIN(lM, cEq, e)
-            cPhys = eq(cEq)%dmn(cDmn)%phys
-            IF (cPhys .NE. phys_struct) CYCLE
-            DO a=1, eNoN
-               Ac = lM%IEN(a,e)
-               vwNo(:,Ac) = vwNo(:,Ac) + lM%vwN(:,e)
-               vwCn(Ac) = vwCn(Ac) + 1._RKIND
-            END DO
-         END DO
-      END IF
+     4   lK(dof*dof,eNoN,eNoN), vwN(nvw))
 
 !     Loop over all elements of mesh
       DO e=1, lM%nEl
@@ -98,7 +80,6 @@
          vwN   = 0._RKIND
          pS0l  = 0._RKIND
          ya_l  = 0._RKIND
-         vwNole = 0._RKIND
          DO a=1, eNoN
             Ac = lM%IEN(a,e)
             ptr(a)   = Ac
@@ -114,7 +95,6 @@
             END IF
             IF (ALLOCATED(lM%vwN)) THEN
                vwN(:) = lM%vwN(:,e)
-               vwNole(:,a)  = vwNo(:,Ac)/vwCn(Ac)
             END IF
 
             IF (ALLOCATED(pS0)) pS0l(:,a) = pS0(:,Ac)
@@ -135,11 +115,11 @@
             pSl = 0._RKIND
             IF (nsd .EQ. 3) THEN
                CALL STRUCT3D(eNoN, nFn, w, N, Nx, al, yl, dl, bfl, fN,
-     2            pS0l, pSl, ya_l, lR, lK, nvw, vwN, vwNole)
+     2            pS0l, pSl, ya_l, lR, lK, nvw, vwN)
 
             ELSE IF (nsd .EQ. 2) THEN
                CALL STRUCT2D(eNoN, nFn, w, N, Nx, al, yl, dl, bfl, fN,
-     2            pS0l, pSl, ya_l, lR, lK, nvw, vwN, vwNole)
+     2            pS0l, pSl, ya_l, lR, lK, nvw, vwN)
 
             END IF
 
@@ -172,14 +152,14 @@
       END SUBROUTINE CONSTRUCT_dSOLID
 !####################################################################
       SUBROUTINE STRUCT3D(eNoN, nFn, w, N, Nx, al, yl, dl, bfl, fN,
-     2   pS0l, pSl, ya_l, lR, lK, nvw, vwN, vwNole)
+     2   pS0l, pSl, ya_l, lR, lK, nvw, vwN)
       USE COMMOD
       USE ALLFUN
       IMPLICIT NONE
       INTEGER(KIND=IKIND), INTENT(IN) :: eNoN, nFn, nvw
       REAL(KIND=RKIND), INTENT(IN) :: w, N(eNoN), Nx(3,eNoN),
      2   al(tDof,eNoN), yl(tDof,eNoN), dl(tDof,eNoN), bfl(3,eNoN),
-     3   fN(3,nFn), pS0l(6,eNoN), ya_l(eNoN), vwN(nvw), vwNole(nvw,eNoN)
+     3   fN(3,nFn), pS0l(6,eNoN), ya_l(eNoN), vwN(nvw)
       REAL(KIND=RKIND), INTENT(OUT) :: pSl(6)
       REAL(KIND=RKIND), INTENT(INOUT) :: lR(dof,eNoN),
      2   lK(dof*dof,eNoN,eNoN)
@@ -188,8 +168,7 @@
       REAL(KIND=RKIND) :: rho, mu, dmp, amd, afu, afv, Jac, ya_g, fb(3),
      2   ud(3), NxSNx, NxNx, BmDBm, vx(3,3), F(3,3), Fi(3,3), ddev(3,3),
      3   Svis(3,3), S(3,3), P(3,3), S0(3,3), Dm(6,6), DBm(6,3),
-     4   Bm(6,3,eNoN), NxFi(3,eNoN), PvNx(3,eNoN), r13, r23, T1, T2,
-     5   vwNol(nvw), vwNot(nvw)
+     4   Bm(6,3,eNoN), NxFi(3,eNoN), PvNx(3,eNoN), r13, r23, T1, T2
 
 !     Define parameters
       rho     = eq(cEq)%dmn(cDmn)%prop(solid_density)
@@ -214,8 +193,6 @@
       F(3,3) = 1._RKIND
       S0     = 0._RKIND
       ya_g   = 0._RKIND
-      vwNol  = 0._RKIND
-      vwNot  = 0._RKIND
       DO a=1, eNoN
          ud(1) = ud(1) + N(a)*(rho*(al(i,a)-bfl(1,a)) + dmp*yl(i,a))
          ud(2) = ud(2) + N(a)*(rho*(al(j,a)-bfl(2,a)) + dmp*yl(j,a))
@@ -250,8 +227,6 @@
 
          ya_g    = ya_g + N(a)*ya_l(a)
 
-         vwNol(:) = vwNol(:) + N(a)*vwNole(:,a)
-
       END DO
       S0(2,1) = S0(1,2)
       S0(3,2) = S0(2,3)
@@ -265,12 +240,10 @@
       Svis = MATMUL(ddev, TRANSPOSE(Fi))
       Svis = MATMUL(Fi, Svis)
 
-      vwNot(:) = 0.5*vwN(:) + 0.5*vwNol(:)
-
 !     2nd Piola-Kirchhoff tensor (S) and material stiffness tensor in
 !     Voigt notationa (Dm)
       CALL GETPK2CC(eq(cEq)%dmn(cDmn), F, nFn, fN, ya_g, S, Dm, nvw,
-     2              vwNot)
+     2              vwN)
 
 !     Elastic + Viscous stresses
       S = S + Svis
