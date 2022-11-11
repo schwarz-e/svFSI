@@ -187,6 +187,7 @@
          CALL cm%bcast(shlEq)
          CALL cm%bcast(pstEq)
          CALL cm%bcast(useVarWall)
+         CALL cm%bcast(nvwp)
          CALL cm%bcast(sstEq)
          CALL cm%bcast(cepEq)
          IF (rmsh%isReqd) THEN
@@ -256,6 +257,25 @@
          pS0 = LOCAL(tmpX)
          DEALLOCATE(tmpX)
       END IF
+
+!     Varwall properties------------------------------------------------
+!     Distribute variable wall properties (vwNo) to processors
+      flag = ALLOCATED(vwNo)
+      CALL cm%bcast(flag)
+      IF (flag) THEN
+         IF (cm%mas()) THEN
+            ALLOCATE(tmpX(nvwp,gtnNo))
+            tmpX = vwNo
+            DEALLOCATE(vwNo)
+         ELSE
+            ALLOCATE(tmpX(0,0))
+         END IF
+         ALLOCATE(vwNo(nvwp,tnNo))
+         vwNo = LOCAL(tmpX)
+         DEALLOCATE(tmpX)
+      END IF
+!     ------------------------------------------------------------------
+
 
 !     Distribute initial flow quantities to processors
       flag = ALLOCATED(Pinit)

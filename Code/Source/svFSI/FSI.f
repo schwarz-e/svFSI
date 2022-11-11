@@ -52,7 +52,7 @@
       INTEGER(KIND=IKIND), ALLOCATABLE :: ptr(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), al(:,:), yl(:,:),
      2   dl(:,:), bfl(:,:), fN(:,:), pS0l(:,:), pSl(:), ya_l(:),
-     3   lR(:,:), lK(:,:,:), lKd(:,:,:), vwN(:)
+     3   lR(:,:), lK(:,:,:), lKd(:,:,:), vwN(:), lvwNo(:,:)
       REAL(KIND=RKIND), ALLOCATABLE :: xwl(:,:), xql(:,:), Nwx(:,:),
      2   Nwxx(:,:), Nqx(:,:)
 
@@ -74,7 +74,7 @@
       ALLOCATE(ptr(eNoN), xl(nsd,eNoN), al(tDof,eNoN), yl(tDof,eNoN),
      2   dl(tDof,eNoN), bfl(nsd,eNoN), fN(nsd,nFn), pS0l(nsymd,eNoN),
      3   pSl(nsymd), ya_l(eNoN), lR(dof,eNoN), lK(dof*dof,eNoN,eNoN),
-     4   lKd(dof*nsd,eNoN,eNoN), vwN(nvw))
+     4   lKd(dof*nsd,eNoN,eNoN), vwN(nvw), lvwNo(nvwp,eNoN))
 
 !     Loop over all elements of mesh
       DO e=1, lM%nEl
@@ -107,6 +107,7 @@
             END IF
             IF (ALLOCATED(lM%vwN)) THEN
                vwN(:) = lM%vwN(:,e)
+               lvwNo(:,a) = vwNo(:,Ac)
             END IF
             IF (ALLOCATED(pS0)) pS0l(:,a) = pS0(:,Ac)
             IF (cem%cpld) ya_l(a) = cem%Ya(Ac)
@@ -167,7 +168,7 @@
                CASE (phys_struct)
                   CALL STRUCT3D(fs(1)%eNoN, nFn, w, fs(1)%N(:,g), Nwx,
      2               al, yl, dl, bfl, fN, pS0l, pSl, ya_l, lR, lK, nvw,
-     3               vwN)
+     3               vwN, lvwNo)
 
                CASE (phys_ustruct)
                   CALL USTRUCT3D_M(vmsStab, fs(1)%eNoN, fs(2)%eNoN, nFn,
@@ -190,7 +191,7 @@
                CASE (phys_struct)
                   CALL STRUCT2D(fs(1)%eNoN, nFn, w, fs(1)%N(:,g), Nwx,
      2               al, yl, dl, bfl, fN, pS0l, pSl, ya_l, lR, lK, nvw,
-     3               vwN)
+     3               vwN, lvwNo)
 
                CASE (phys_ustruct)
                   CALL USTRUCT2D_M(vmsStab, fs(1)%eNoN, fs(2)%eNoN, nFn,
@@ -268,7 +269,7 @@
       END DO ! e: loop
 
       DEALLOCATE(ptr, xl, al, yl, dl, bfl, fN, pS0l, pSl, ya_l, lR, lK,
-     2   lKd)
+     2   lKd, vwN, lvwNo)
 
       CALL DESTROY(fs(1))
       CALL DESTROY(fs(2))

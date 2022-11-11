@@ -385,8 +385,10 @@ c               END IF
       DO iM=1, nMsh
          lPM => list%get(msh(iM)%name,"Add mesh",iM)
          lPtr => lPM%get(cTmp, "Variable wall properties file path")
+         lPtr2 => lPM%get(nvwp, "Number of variable wall properties")
          lPtr2 => lPM%get(msh(iM)%nvw,
-     2      "Number of variable wall properties")
+     2                    "Number of variable wall properties")
+
 
          IF (ASSOCIATED(lPtr) .AND. ASSOCIATED(lPtr2)) THEN
             IF (rmsh%isReqd) THEN
@@ -396,13 +398,29 @@ c               END IF
             flag = .TRUE.
             useVarWall = .TRUE.
             std = " Setting cell variable wall flag to true"
-            ALLOCATE(msh(iM)%vwN(msh(iM)%nvw,msh(iM)%gnEl))
+            ALLOCATE(msh(iM)%vwN(nvwp,msh(iM)%gnEl))
+            ALLOCATE(msh(iM)%x(nvwp,msh(iM)%gnNo))
             msh(iM)%vwN = 0._RKIND
+            msh(iM)%x = 0._RKIND
             CALL READVTUCDATA(msh(iM), cTmp, "varWallProps")
+            CALL READVTUPDATA(msh(iM), cTmp, "varWallProps",
+     2           msh(iM)%nvw, 1)
          ELSE
-            msh(iM)%nvw = 0
+            nvwp = 0
          END IF
       END DO
+      IF (flag) THEN
+         ALLOCATE(vwNo(nvwp,gtnNo))
+         vwNo = 0._RKIND
+         DO iM=1, nMsh
+            IF (.NOT.ALLOCATED(msh(iM)%x)) CYCLE
+            DO a=1, msh(iM)%gnNo
+               Ac = msh(iM)%gN(a)
+               vwNo(:,Ac) = msh(iM)%x(:,a)
+            END DO
+            DEALLOCATE(msh(iM)%x)
+         END DO
+      END IF
 
 
 !     Read prestress data

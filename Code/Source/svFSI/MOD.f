@@ -904,6 +904,8 @@
       INTEGER(KIND=IKIND) rsTS
 !     Number of stress values to be stored
       INTEGER(KIND=IKIND) nsymd
+!     Number of variable wall properties to read in from mesh
+      INTEGER(KIND=IKIND) nvwp
 
 !     REAL VARIABLES
 !     Time step size
@@ -974,6 +976,9 @@
       REAL(KIND=RKIND), ALLOCATABLE :: pS0(:,:)
       REAL(KIND=RKIND), ALLOCATABLE :: pSn(:,:)
       REAL(KIND=RKIND), ALLOCATABLE :: pSa(:)
+
+!     Variable wall values stored at the nodal level
+      REAL(KIND=RKIND), ALLOCATABLE :: vwNo(:,:)
 
 !     Temporary storage for initializing state variables
       REAL(KIND=RKIND), ALLOCATABLE :: Pinit(:)

@@ -523,12 +523,14 @@
       REAL(KIND=RKIND) w, Jac, detF, Je, ya, Ja, elM, nu, lambda, mu,
      2   p, trS, vmises, xi(nsd), xi0(nsd), xp(nsd), ed(nsymd),
      3   Im(nsd,nsd), F(nsd,nsd), C(nsd,nsd), Eg(nsd,nsd), P1(nsd,nsd),
-     4   S(nsd,nsd), sigma(nsd,nsd), Dm(nsymd,nsymd)
+     4   S(nsd,nsd), sigma(nsd,nsd), Dm(nsymd,nsymd), vwNg(nvwp),
+     5   vwNt(nvwp)
       TYPE(fsType) :: fs
 
       INTEGER, ALLOCATABLE :: eNds(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), dl(:,:), yl(:,:),
-     2   fN(:,:), resl(:), Nx(:,:), N(:), sA(:), sF(:,:), sE(:), vwN(:)
+     2   fN(:,:), resl(:), Nx(:,:), N(:), sA(:), sF(:,:), sE(:), vwN(:),
+     3   lvwNo(:,:)
 
       dof  = eq(iEq)%dof
       i    = eq(iEq)%s
@@ -559,7 +561,7 @@
 
       ALLOCATE (sA(tnNo), sF(m,tnNo), sE(lM%nEl), xl(nsd,fs%eNoN),
      2   dl(tDof,fs%eNoN), yl(tDof,fs%eNoN), fN(nsd,nFn), resl(m),
-     3   Nx(nsd,fs%eNoN), N(fs%eNoN), vwN(nvw))
+     3   Nx(nsd,fs%eNoN), N(fs%eNoN), vwN(nvw), lvwNo(nvwp,fs%eNoN))
 
       sA   = 0._RKIND
       sF   = 0._RKIND
@@ -602,6 +604,7 @@
             xl(:,a) = x(:,Ac)
             dl(:,a) = lD(:,Ac)
             yl(:,a) = lY(:,Ac)
+            IF (useVarWall) lvwNo(:,a) = vwNo(:,Ac)
          END DO
 
          Je = 0._RKIND
@@ -615,6 +618,7 @@
 
             Im = MAT_ID(nsd)
             F  = Im
+            vwNg = 0._RKIND
             DO a=1, fs%eNoN
                IF (nsd .EQ. 3) THEN
                   F(1,1) = F(1,1) + Nx(1,a)*dl(i,a)
@@ -632,8 +636,12 @@
                   F(2,1) = F(2,1) + Nx(1,a)*dl(j,a)
                   F(2,2) = F(2,2) + Nx(2,a)*dl(j,a)
                END IF
+               IF (useVarWall) THEN
+                  vwNg(:) = vwNg(:) + N(a)*lvwNo(:,a)
+               END IF
             END DO
             detF = MAT_DET(F, nsd)
+            vwNt(:) = 0.5*vwNg(:) + 0.5*vwN(:)
 
             ed = 0._RKIND
             IF (cPhys .EQ. phys_lElas) THEN
@@ -743,7 +751,7 @@
 
                ELSE IF (cPhys .EQ. phys_struct) THEN
                   CALL GETPK2CC(eq(iEq)%dmn(cDmn), F, nFn, fN, ya, S, 
-     2                Dm, nvw, vwN)
+     2                Dm, nvw, vwNt)
                   P1 = MATMUL(F, S)
                   sigma = MATMUL(P1, TRANSPOSE(F))
                   IF (.NOT.ISZERO(detF)) sigma(:,:) = sigma(:,:) / detF
