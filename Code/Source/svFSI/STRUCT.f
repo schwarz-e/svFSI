@@ -44,18 +44,20 @@
       REAL(KIND=RKIND), INTENT(IN) :: Ag(tDof,tnNo), Yg(tDof,tnNo),
      2   Dg(tDof,tnNo)
 
-      INTEGER(KIND=IKIND) a, e, g, Ac, eNoN, cPhys, iFn, nFn, nvw
+      INTEGER(KIND=IKIND) a, e, g, Ac, eNoN, cPhys, iFn, nFn, nvw, nvwa
       REAL(KIND=RKIND) w, Jac, ksix(nsd,nsd)
 
       INTEGER(KIND=IKIND), ALLOCATABLE :: ptr(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), al(:,:), yl(:,:),
      2   dl(:,:), bfl(:,:), fN(:,:), pS0l(:,:), pSl(:), ya_l(:), N(:),
-     3   Nx(:,:), lR(:,:), lK(:,:,:), vwN(:)
+     3   Nx(:,:), lR(:,:), lK(:,:,:), vwN(:), vwNa(:)
 
       eNoN = lM%eNoN
       nFn  = lM%nFn
       nvw  = lM%nvw
 
+      nvwa = 1
+      IF (nvw .NE. 0) nvwa = nvw/lM%nG
       IF (nFn .EQ. 0) nFn = 1
       IF (nvw .EQ. 0) nvw = 1
 
@@ -63,7 +65,7 @@
       ALLOCATE(ptr(eNoN), xl(nsd,eNoN), al(tDof,eNoN), yl(tDof,eNoN),
      2   dl(tDof,eNoN), bfl(nsd,eNoN), fN(nsd,nFn), pS0l(nsymd,eNoN),
      3   pSl(nsymd), ya_l(eNoN), N(eNoN), Nx(nsd,eNoN), lR(dof,eNoN),
-     4   lK(dof*dof,eNoN,eNoN), vwN(nvw))
+     4   lK(dof*dof,eNoN,eNoN), vwN(nvw), vwNa(nvwa))
 
 !     Loop over all elements of mesh
       DO e=1, lM%nEl
@@ -104,6 +106,7 @@
 !        Gauss integration
          lR = 0._RKIND
          lK = 0._RKIND
+         vwNa   = 0._RKIND
          DO g=1, lM%nG
             IF (g.EQ.1 .OR. .NOT.lM%lShpF) THEN
                CALL GNN(eNoN, nsd, lM%Nx(:,:,g), xl, Nx, Jac, ksix)
@@ -114,8 +117,15 @@
 
             pSl = 0._RKIND
             IF (nsd .EQ. 3) THEN
-               CALL STRUCT3D(eNoN, nFn, w, N, Nx, al, yl, dl, bfl, fN,
-     2            pS0l, pSl, ya_l, lR, lK, nvw, vwN)
+               IF(eq(cEq)%dmn(cDmn)%stM%isoType .EQ. stISo_aniso) THEN
+                  vwNa(:) = vwN((g-1)*nvwa+1:g*nvwa)
+                  CALL STRUCT3D(eNoN, nFn, w, N, Nx, al, yl, dl, bfl,
+     2                fN, pS0l, pSl, ya_l, lR, lK, nvwa, vwNa)
+               ELSE
+                  CALL STRUCT3D(eNoN, nFn, w, N, Nx, al, yl, dl, bfl,
+     2                fN,pS0l, pSl, ya_l, lR, lK, nvw, vwN)
+               END IF
+
 
             ELSE IF (nsd .EQ. 2) THEN
                CALL STRUCT2D(eNoN, nFn, w, N, Nx, al, yl, dl, bfl, fN,
@@ -146,7 +156,7 @@
       END DO ! e: loop
 
       DEALLOCATE(ptr, xl, al, yl, dl, bfl, fN, pS0l, pSl, ya_l, N, Nx,
-     2   lR, lK)
+     2   lR, lK, vwN, vwNa)
 
       RETURN
       END SUBROUTINE CONSTRUCT_dSOLID
