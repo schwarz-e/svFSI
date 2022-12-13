@@ -119,7 +119,11 @@
       pl = 0._RKIND
 
       IF (stM%isoType .EQ. stISo_aniso) THEN
-         dV = vwN(38)
+         IF (time .LT. 1._RKIND) THEN
+            dV = 1._RKIND + time*(vwN(38) - 1._RKIND)/1._RKIND
+         ELSE
+            dV = vwN(38)
+         END IF
          dV2d  = dV**(-2._RKIND/nd)
          p  = Kp*(1._RKIND/dV - 1._RKIND/J)
          pl = Kp/dV
