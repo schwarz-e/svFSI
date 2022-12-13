@@ -42,7 +42,7 @@
       IMPLICIT NONE
 
       LOGICAL l1, l2, l3
-      INTEGER(KIND=IKIND) i, iM, iBc, ierr, iEqOld, stopTS, mpi_comm_par
+      INTEGER(KIND=IKIND) i, iM, iBc, ierr, iEqOld, stopTS
       REAL(KIND=RKIND) timeP(3)
 
       INTEGER(KIND=IKIND), ALLOCATABLE :: incL(:)
@@ -292,12 +292,6 @@
       IF (l1 .AND. saveAve) CALL CALCAVE
 
       DEALLOCATE(Ag, Yg, Dg, incL, res)
-
-      call mpi_COMM_get_parent(mpi_comm_par,ierr)
-      IF (mpi_comm_par .ne. MPI_COMM_NULL) THEN
-         CALL MPI_BARRIER(mpi_comm_par,ierr)
-         CALL MPI_COMM_DISCONNECT(mpi_comm_par,ierr)
-      end if
 
       CALL FINALIZE()
       CALL MPI_FINALIZE(ierr)
