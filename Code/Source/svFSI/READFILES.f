@@ -1678,7 +1678,7 @@
       CASE ('Spatial')
          lBc%bType = IBSET(lBc%bType,bType_gen)
          IF (.NOT.BTEST(lBc%bType,bType_Neu)) err = "Spatial BC"//
-     2      " is only defined for Neu BC"
+     3      " is only defined for Neu BC"
 
          lPtr => list%get(fTmp, "Spatial values file path")
          iM  = lBc%iM
@@ -1692,7 +1692,6 @@
          lBc%gm%period = lBc%gm%t(2)
 
          CALL READTRACBCFF(lBc%gm, msh(iM)%fa(iFa), fTmp%fname)
-
       CASE ('General')
          iM  = lBc%iM
          iFa = lBc%iFa
@@ -1770,6 +1769,25 @@
          lPtr => list%get(lBc%k, "Stiffness", 1)
          lPtr => list%get(lBc%c, "Damping", 1)
          lPtr => list%get(lBc%rbnN, "Apply along normal direction")
+
+         lPtr => list%get(fTmp, "Reference values file path")
+         IF (ASSOCIATED(lPtr)) THEN
+            lBc%bType = IBSET(lBc%bType,bType_ref)
+            IF (.NOT.BTEST(lBc%bType,bType_Robin)) err =
+     2         "Reference BC is only defined for Robin BC"
+            iM  = lBc%iM
+            iFa = lBc%iFa
+            ALLOCATE(lBc%gm)
+            lBc%gm%dof = nsd
+            lBc%gm%nTP = 2
+            ALLOCATE(lBc%gm%t(2), lBc%gm%d(nsd,msh(iM)%fa(iFa)%nNo,2))
+            lBc%gm%t(1) = 0._RKIND
+            lBc%gm%t(2) = 1.E+10_RKIND
+            lBc%gm%period = lBc%gm%t(2)
+
+            CALL READROBINBCDISP(lBc%gm, msh(iM)%fa(iFa), fTmp%fname)
+         END IF
+
       END IF
 
 !     To impose value or flux
@@ -2798,6 +2816,74 @@ c     2         "can be applied for Neumann boundaries only"
 
       RETURN
       END SUBROUTINE READBCT
+!####################################################################
+!     This subroutine reads reference data from a vtp file and
+!     stores in moving BC data structure
+      SUBROUTINE READROBINBCDISP(lMB, lFa, fName)
+      USE COMMOD
+      USE LISTMOD
+      USE ALLFUN
+      USE vtkXMLMod
+      IMPLICIT NONE
+      TYPE(MBType), INTENT(INOUT) :: lMB
+      TYPE(faceType), INTENT(INOUT) :: lFa
+      CHARACTER(LEN=stdL) :: fName
+
+      INTEGER(KIND=IKIND) :: iStat, a, i, Ac
+      TYPE(vtkXMLType) :: vtp
+      TYPE(faceType) :: gFa
+
+      INTEGER(KIND=IKIND), ALLOCATABLE :: ptr(:)
+      REAL(KIND=RKIND), ALLOCATABLE :: tmpX2(:,:)
+
+!     Read Traction data from VTP file
+      iStat = 0
+      std = " <VTK XML Parser> Loading file <"//TRIM(fName)//">"
+      CALL loadVTK(vtp, fName, iStat)
+      IF (iStat .LT. 0) err = "VTP file read error (init)"
+
+      CALL getVTK_numPoints(vtp, gFa%nNo, iStat)
+      IF (iStat .LT. 0) err = "VTP file read error (num points)"
+
+      ALLOCATE(tmpX2(maxNSD,gFa%nNo))
+
+      CALL getVTK_pointCoords(vtp, tmpX2, iStat)
+      IF (iStat .LT. 0) err = "VTP file read error (coords)"
+      ALLOCATE(gFa%x(nsd,gFa%nNo))
+      gFa%x(:,:) = tmpX2(1:nsd,:)
+
+      CALL getVTK_pointData(vtp, "Coordinate", tmpX2, iStat)
+
+      IF (iStat .LT. 0) err = "VTP file read error (point data)"
+
+      CALL flushVTK(vtp)
+
+!     Project coordinate from gFa to lFa. First prepare lFa%x, lFa%IEN
+      ALLOCATE(lFa%x(nsd,lFa%nNo))
+      DO a=1, lFa%nNo
+         Ac = lFa%gN(a)
+         lFa%x(:,a) = x(:,Ac)
+      END DO
+
+      ALLOCATE(ptr(lFa%nNo))
+      ptr = 0
+      CALL FACEMATCH(lFa, gFa, ptr)
+
+!     Copy pressure/traction data to MB data structure
+      DO a=1, lFa%nNo
+         Ac = ptr(a)
+         DO i=1, lMB%dof
+            lMB%d(i,a,1) = tmpX2(i,Ac)
+            lMB%d(i,a,2) = tmpX2(i,Ac)
+         END DO
+      END DO
+
+      CALL DESTROY(gFa)
+      DEALLOCATE(lFa%x, ptr, tmpX2)
+
+      RETURN
+      END SUBROUTINE READROBINBCDISP
+
 !####################################################################
 !     This subroutine reads pressure/traction data from a vtp file and
 !     stores in moving BC data structure

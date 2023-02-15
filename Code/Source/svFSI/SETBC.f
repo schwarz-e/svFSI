@@ -310,7 +310,7 @@
 
 !     Now treat Robin BC (stiffness and damping) here
       IF (BTEST(lBc%bType,bType_Robin))
-     2   CALL SETBCRBNL(lFa, lBc%k, lBc%c, lBc%rbnN, Yg, Dg)
+     2   CALL SETBCRBNL(lBc, lFa, lBc%k, lBc%c, lBc%rbnN, Yg, Dg)
 
       RETURN
       END SUBROUTINE SETBCNEUL
@@ -416,22 +416,23 @@
       END SUBROUTINE SETBCTRACL
 !--------------------------------------------------------------------
 !     Set Robin BC
-      SUBROUTINE SETBCRBNL(lFa, ks, cs, isN, Yg, Dg)
+      SUBROUTINE SETBCRBNL(lBc, lFa, ks, cs, isN, Yg, Dg)
       USE COMMOD
       USE ALLFUN
       IMPLICIT NONE
+      TYPE(bcType), INTENT(IN) :: lBc
       TYPE(faceType), INTENT(IN) :: lFa
       LOGICAL, INTENT(IN) :: isN
       REAL(KIND=RKIND), INTENT(IN) :: ks, cs, Yg(tDof,tnNo),
      2   Dg(tDof,tnNo)
 
-      INTEGER(KIND=IKIND) :: a, b, e, g, s, Ac, iM, eNoN, cPhys
+      INTEGER(KIND=IKIND) :: a, b, e, g, s, Ac, iM, eNoN, cPhys, nNo
       REAL(KIND=RKIND) :: Jac, afu, afv, afm, w, wl, T1, T2, nV(nsd),
      2   u(nsd), ud(nsd), h(nsd), nDn(nsd,nsd)
 
       INTEGER(KIND=IKIND), ALLOCATABLE :: ptr(:)
       REAL(KIND=RKIND), ALLOCATABLE :: N(:), xl(:,:), yl(:,:), dl(:,:),
-     2   lR(:,:), lK(:,:,:), lKd(:,:,:)
+     2   lR(:,:), lK(:,:,:), lKd(:,:,:), hl(:,:), hg(:,:), tmpA(:,:)
 
       s   = eq(cEq)%s
       afv = eq(cEq)%af*eq(cEq)%gam*dt
@@ -440,22 +441,51 @@
 
       iM   = lFa%iM
       eNoN = lFa%eNoN
+      nNo  = lFa%nNo
 
       ALLOCATE(N(eNoN), xl(nsd,eNoN), yl(nsd,eNoN), dl(nsd,eNoN),
      2   lR(dof,eNoN), lK(dof*dof,eNoN,eNoN), lKd(nsd*dof,eNoN,eNoN),
      3   ptr(eNoN))
 
+
+!     Geting the contribution of reference coordinate BC
+      ALLOCATE(hg(nsd,tnNo))
+      IF (BTEST(lBc%bType,bType_ref)) THEN
+!     Using "hl" as a temporary variable here
+         ALLOCATE(tmpA(nsd,nNo), hl(nsd,nNo))
+         CALL IGBC(lBc%gm, tmpA, hl)
+         DO a=1, nNo
+            Ac       = lFa%gN(a)
+            hg(:,Ac) = tmpA(:,a)
+         END DO
+         DEALLOCATE(tmpA, hl)
+      END IF
+
+
       DO e=1, lFa%nEl
          cDmn  = DOMAIN(msh(iM), cEq, lFa%gE(e))
          cPhys = eq(cEq)%dmn(cDmn)%phys
 
-         DO a=1, eNoN
-            Ac      = lFa%IEN(a,e)
-            ptr(a)  = Ac
-            xl(:,a) =  x(:,Ac)
-            yl(:,a) = Yg(s:s+nsd-1,Ac)
-            dl(:,a) = Dg(s:s+nsd-1,Ac)
-         END DO
+
+         IF (BTEST(lBc%bType,bType_ref)) THEN
+            DO a=1, eNoN
+               Ac      = lFa%IEN(a,e)
+               ptr(a)  = Ac
+               xl(:,a) = x(:,Ac)
+               yl(:,a) = Yg(s:s+nsd-1,Ac)
+               dl(:,a) = x(:,Ac) + Dg(s:s+nsd-1,Ac) - hg(:,Ac)
+            END DO
+         ELSE
+            DO a=1, eNoN
+               Ac      = lFa%IEN(a,e)
+               ptr(a)  = Ac
+               xl(:,a) = x(:,Ac)
+               yl(:,a) = Yg(s:s+nsd-1,Ac)
+               dl(:,a) = Dg(s:s+nsd-1,Ac)
+            END DO
+         END IF
+
+
          IF (lFa%eType .EQ. eType_NRB) CALL NRBNNXB(msh(iM), lFa, e)
 
          lK  = 0._RKIND
