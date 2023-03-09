@@ -118,6 +118,13 @@
       p  = 0._RKIND
       pl = 0._RKIND
 
+!      IF ((stM%isoType .EQ. stISo_aniso)
+!     2     .OR. (stM%isoType .EQ. stISo_mix)) THEN
+!         IF (time .LT. 1._RKIND) THEN
+!            Kp = Kp*(time/1._RKIND)
+!         END IF
+!      END IF
+      
       IF (stM%isoType .EQ. stISo_aniso) THEN
          IF (time .LT. 1._RKIND) THEN
             dV = 1._RKIND + time*(vwN(38) - 1._RKIND)/1._RKIND
@@ -125,8 +132,8 @@
             dV = vwN(38)
          END IF
          dV2d  = dV**(-2._RKIND/nd)
-         p  = Kp*(1._RKIND/dV - 1._RKIND/J)
-         pl = Kp/dV
+         p  = Kp*(J/dV - 1._RKIND)
+         pl = Kp*(2._RKIND*J/dV - 1._RKIND)
       ELSE 
          IF (.NOT.ISZERO(Kp)) CALL GETSVOLP(stM, J, p, pl)
       END IF
