@@ -117,13 +117,6 @@
 !     Contribution of dilational penalty terms to S and CC
       p  = 0._RKIND
       pl = 0._RKIND
-
-!      IF ((stM%isoType .EQ. stISo_aniso)
-!     2     .OR. (stM%isoType .EQ. stISo_mix)) THEN
-!         IF (time .LT. 1._RKIND) THEN
-!            Kp = Kp*(time/1._RKIND)
-!         END IF
-!      END IF
       
       IF (stM%isoType .EQ. stISo_aniso) THEN
          IF (time .LT. 1._RKIND) THEN

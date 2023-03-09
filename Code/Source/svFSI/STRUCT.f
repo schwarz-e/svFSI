@@ -184,12 +184,6 @@
       rho     = eq(cEq)%dmn(cDmn)%prop(solid_density)
       mu      = eq(cEq)%dmn(cDmn)%prop(solid_viscosity)
       dmp     = eq(cEq)%dmn(cDmn)%prop(damping)
-!      IF (time .LT. 1._RKIND) THEN
-!         dmp = (dmp - 10000._RKIND)*(1._RKIND - time/1._RKIND)
-!     2         + 10000._RKIND
-!      ELSE
-!         dmp = 10000._RKIND
-!      END IF
       fb(1)   = eq(cEq)%dmn(cDmn)%prop(f_x)
       fb(2)   = eq(cEq)%dmn(cDmn)%prop(f_y)
       fb(3)   = eq(cEq)%dmn(cDmn)%prop(f_z)
