@@ -1123,6 +1123,7 @@
       IF (ALLOCATED(lFa%xi))     DEALLOCATE(lFa%xi)
       IF (ALLOCATED(lFa%N))      DEALLOCATE(lFa%N)
       IF (ALLOCATED(lFa%nV))     DEALLOCATE(lFa%nV)
+      IF (ALLOCATED(lFa%enV))    DEALLOCATE(lFa%enV)
       IF (ALLOCATED(lFa%Nx))     DEALLOCATE(lFa%Nx)
       IF (ALLOCATED(lFa%Nxx))    DEALLOCATE(lFa%Nxx)
 
@@ -1175,6 +1176,7 @@
       IF (ALLOCATED(lM%Nb))      DEALLOCATE(lM%Nb)
       IF (ALLOCATED(lM%nV))      DEALLOCATE(lM%nV)
       IF (ALLOCATED(lM%fN))      DEALLOCATE(lM%fN)
+      IF (ALLOCATED(lM%vwN))     DEALLOCATE(lM%vwN)
       IF (ALLOCATED(lM%Nx))      DEALLOCATE(lM%Nx)
       IF (ALLOCATED(lM%Nxx))     DEALLOCATE(lM%Nxx)
 
@@ -1211,6 +1213,7 @@
       lM%nFa   = 0
       lM%nNo   = 0
       lM%nFn   = 0
+      lM%nvw   = 0
 
       RETURN
       END SUBROUTINE DESTROYMSH

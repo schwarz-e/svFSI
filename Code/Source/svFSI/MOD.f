@@ -358,6 +358,8 @@
          REAL(KIND=RKIND), ALLOCATABLE :: N(:,:)
 !        Normal vector to each nodal point
          REAL(KIND=RKIND), ALLOCATABLE :: nV(:,:)
+!        Normal vector to each element
+         REAL(KIND=RKIND), ALLOCATABLE :: enV(:,:)
 !        Shape functions derivative at Gauss points
          REAL(KIND=RKIND), ALLOCATABLE :: Nx(:,:,:)
 !        Second derivatives of shape functions - for shells & IGA
@@ -532,6 +534,8 @@
          INTEGER(KIND=IKIND) vtkType
 !        Number of fiber directions
          INTEGER(KIND=IKIND) nFn
+!        Number of variable wall properties
+         INTEGER(KIND=IKIND) nvw
 !        Mesh scale factor
          REAL(KIND=RKIND) scF
 !        IB: Mesh size parameter
@@ -580,6 +584,8 @@
 !        Fiber orientations stored at the element level - used for
 !        electrophysiology and solid mechanics
          REAL(KIND=RKIND), ALLOCATABLE :: fN(:,:)
+!        Variable wall values stored at the element level
+         REAL(KIND=RKIND), ALLOCATABLE :: vwN(:,:)
 !        Parent shape functions gradient
          REAL(KIND=RKIND), ALLOCATABLE :: Nx(:,:,:)
 !        Second derivatives of shape functions - used for shells & IGA
@@ -840,6 +846,8 @@
       LOGICAL cmmInit
 !     Whether variable wall properties are used for CMM
       LOGICAL cmmVarWall
+!     Whether cell variable wall properties are used
+      LOGICAL useVarWall
 !     Whether shell equation is being solved
       LOGICAL shlEq
 !     Whether PRESTRESS is being solved

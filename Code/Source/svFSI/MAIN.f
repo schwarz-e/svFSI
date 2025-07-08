@@ -292,6 +292,7 @@
       IF (l1 .AND. saveAve) CALL CALCAVE
 
       DEALLOCATE(Ag, Yg, Dg, incL, res)
+
       CALL FINALIZE()
       CALL MPI_FINALIZE(ierr)
 

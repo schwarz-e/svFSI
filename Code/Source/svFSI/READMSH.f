@@ -50,7 +50,7 @@
       INTEGER(KIND=IKIND) :: i, j, iM, iFa, a, b, Ac, e, lDof, lnNo
       REAL(KIND=RKIND) :: maxX(nsd), minX(nsd), fibN(nsd), rtmp
       CHARACTER(LEN=stdL) :: ctmp, fExt
-      TYPE(listType), POINTER :: lPtr, lPM
+      TYPE(listType), POINTER :: lPtr, lPM, lPtr2
       TYPE(stackType) :: avNds
       TYPE(fileType) :: fTmp
 
@@ -378,6 +378,32 @@ c               END IF
       ELSE
          msh(:)%nFn = 0
       END IF
+
+
+!     Read cell variable wall values
+      flag = .FALSE.
+      DO iM=1, nMsh
+         lPM => list%get(msh(iM)%name,"Add mesh",iM)
+         lPtr => lPM%get(cTmp, "Variable wall properties file path")
+         lPtr2 => lPM%get(msh(iM)%nvw,
+     2      "Number of variable wall properties")
+
+         IF (ASSOCIATED(lPtr) .AND. ASSOCIATED(lPtr2)) THEN
+            IF (rmsh%isReqd) THEN
+               err = "Variable wall properties "//
+     2            "is not currently allowed with remeshing"
+            END IF
+            flag = .TRUE.
+            useVarWall = .TRUE.
+            std = " Setting cell variable wall flag to true"
+            ALLOCATE(msh(iM)%vwN(msh(iM)%nvw,msh(iM)%gnEl))
+            msh(iM)%vwN = 0._RKIND
+            CALL READVTUCDATA(msh(iM), cTmp, "varWallProps")
+         ELSE
+            msh(iM)%nvw = 0
+         END IF
+      END DO
+
 
 !     Read prestress data
       flag = .FALSE.
@@ -855,6 +881,44 @@ c               END IF
 
       RETURN
       END SUBROUTINE READFIBNFF
+!####################################################################
+!     Read fiber direction from a vtu file
+      SUBROUTINE READVTUCDATA(lM, fName, kwrd)
+      USE COMMOD
+      USE LISTMOD
+      USE ALLFUN
+      USE vtkXMLMod
+      IMPLICIT NONE
+      TYPE(mshType), INTENT(INOUT) :: lM
+      CHARACTER(LEN=*) :: fName, kwrd
+
+      INTEGER(KIND=IKIND) :: iStat, e
+      TYPE(vtkXMLType) :: vtu
+
+      REAL(KIND=RKIND), ALLOCATABLE :: tmpR(:,:)
+
+      iStat = 0;
+      std = " <VTK XML Parser> Loading file <"//TRIM(fName)//">"
+      CALL loadVTK(vtu, fName, iStat)
+      IF (iStat .LT. 0) err = "VTU file read error (init)"
+
+      CALL getVTK_numElems(vtu, e, iStat)
+      IF (e .NE. lM%gnEl) err = "Mismatch in num elems for "//
+     2   TRIM(kwrd)
+
+      ALLOCATE(tmpR(lM%nvw,lM%gnEl))
+      tmpR = 0._RKIND
+      CALL getVTK_elemData(vtu, TRIM(kwrd), tmpR, iStat)
+      IF (iStat .LT. 0) err = "VTU file read error "//TRIM(kwrd)
+      DO e=1, lM%gnEl
+         lM%vwN(1:lM%nvw,e) = tmpR(1:lM%nvw,e)
+      END DO
+      DEALLOCATE(tmpR)
+
+      CALL flushVTK(vtu)
+
+      RETURN
+      END SUBROUTINE READVTUCDATA
 !####################################################################
 !     Check the mesh IEN structure and ordering
       SUBROUTINE CHECKIEN(lM)

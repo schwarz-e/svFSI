@@ -186,6 +186,7 @@
          CALL cm%bcast(cmmVarWall)
          CALL cm%bcast(shlEq)
          CALL cm%bcast(pstEq)
+         CALL cm%bcast(useVarWall)
          CALL cm%bcast(sstEq)
          CALL cm%bcast(cepEq)
          IF (rmsh%isReqd) THEN
@@ -403,7 +404,7 @@
       IMPLICIT NONE
       TYPE(mshType), INTENT(INOUT) :: lM
 
-      LOGICAL fnFlag
+      LOGICAL fnFlag, vwFlag
       INTEGER(KIND=IKIND) i, insd
 
       CALL cm%bcast(lM%lShpF)
@@ -418,12 +419,15 @@
       CALL cm%bcast(lM%nG)
       CALL cm%bcast(lM%vtkType)
       CALL cm%bcast(lM%nFn)
+      CALL cm%bcast(lM%nvw)
       CALL cm%bcast(lM%scF)
       CALL cm%bcast(lM%dx)
       CALL cm%bcast(lM%name)
 
       fnFlag = ALLOCATED(lM%fN)
+      vwFlag = ALLOCATED(lM%vwN)
       CALL cm%bcast(fnFlag)
+      CALL cm%bcast(vwFlag)
 
       IF (cm%slv()) THEN
          lM%nNo = lM%gnNo
@@ -434,6 +438,7 @@
          ALLOCATE(lM%eId(lM%nEl))
          ALLOCATE(lM%fa(lM%nFa))
          IF (fnFlag) ALLOCATE(lM%fN(lM%nFn*nsd,lM%nEl))
+         IF (vwFlag) ALLOCATE(lM%vwN(lM%nvw,lM%nEl))
          CALL SELECTELE(lM)
       END IF
       CALL cm%bcast(lM%gN)
@@ -441,6 +446,7 @@
       CALL cm%bcast(lM%IEN)
       CALL cm%bcast(lM%eId)
       IF (fnFlag) CALL cm%bcast(lM%fN)
+      IF (vwFlag) CALL cm%bcast(lM%vwN)
 
       IF (lM%eType .EQ. eType_NRB) THEN
          CALL cm%bcast(lM%nSl)
@@ -1108,15 +1114,15 @@
       INTEGER(KIND=IKIND), INTENT(INOUT) :: gmtl(gtnNo)
       TYPE(mshType), INTENT(INOUT) :: lM
 
-      LOGICAL :: flag, fnFlag
+      LOGICAL :: flag, fnFlag, vwFlag
       INTEGER(KIND=MPI_OFFSET_KIND) :: idisp
       INTEGER(KIND=IKIND) :: i, a, Ac, e, Ec, edgecut, nEl, nNo, eNoN,
-     2   eNoNb, ierr, fid, SPLIT, insd, nFn
+     2   eNoNb, ierr, fid, SPLIT, insd, nFn, nvw
       CHARACTER(LEN=stdL) fTmp
 
       INTEGER(KIND=IKIND), ALLOCATABLE :: part(:), gPart(:),
      2   tempIEN(:,:), gtlPtr(:), sCount(:), disp(:)
-      REAL(KIND=RKIND), ALLOCATABLE :: tmpR(:), tmpFn(:,:)
+      REAL(KIND=RKIND), ALLOCATABLE :: tmpR(:), tmpFn(:,:), tmpvw(:,:)
 
       IF (cm%seq()) THEN
          lM%nEl = lM%gnEl
@@ -1147,8 +1153,10 @@
       CALL cm%bcast(lM%gnNo)
       CALL cm%bcast(lM%name)
       CALL cm%bcast(lM%nFn)
+      CALL cm%bcast(lM%nvw)
       CALL cm%bcast(lM%scF)
       nFn = lM%nFn
+      nvw = lM%nvw
 
       insd = nsd
       IF (lM%lShl) insd = nsd - 1
@@ -1345,6 +1353,20 @@ c            wrn = " ParMETIS failed to partition the mesh"
             END DO
             DEALLOCATE(lM%fN)
          END IF
+
+!     This it to distribute vwN, if allocated
+         vwFlag = .FALSE.
+         IF (ALLOCATED(lM%vwN)) THEN
+            vwFlag = .TRUE.
+            ALLOCATE(tmpvw(nvw,lM%gnEl))
+            tmpvw = 0._RKIND
+            DO e=1, lM%gnEl
+               Ec = lM%otnIEN(e)
+               tmpvw(:,Ec) = lM%vwN(:,e)
+            END DO
+            DEALLOCATE(lM%vwN)
+         END IF
+
       ELSE
          ALLOCATE(lM%otnIEN(0))
       END IF
@@ -1352,6 +1374,7 @@ c            wrn = " ParMETIS failed to partition the mesh"
 
       CALL cm%bcast(flag)
       CALL cm%bcast(fnFlag)
+      CALL cm%bcast(vwFlag)
       CALL cm%bcast(lM%eDist)
 
       nEl = lM%eDist(cm%id() + 1) - lM%eDist(cm%id())
@@ -1383,6 +1406,19 @@ c            wrn = " ParMETIS failed to partition the mesh"
          CALL MPI_SCATTERV(tmpFn, sCount, disp, mpreal, lM%fN,
      2      nEl*nFn*nsd, mpreal, master, cm%com(), ierr)
          DEALLOCATE(tmpFn)
+      END IF
+
+!     Communicating cell variable wall properties, if neccessary
+      IF (vwFlag) THEN
+         ALLOCATE(lM%vwN(nvw,nEl))
+         IF (.NOT.ALLOCATED(tmpvw)) ALLOCATE(tmpvw(0,0))
+         DO i=1, cm%np()
+            disp(i)   = lM%eDist(i-1)*nvw
+            sCount(i) = lM%eDist(i)*nvw - disp(i)
+         END DO
+         CALL MPI_SCATTERV(tmpvw, sCount, disp, mpreal, lM%vwN,
+     2      nEl*nvw, mpreal, master, cm%com(), ierr)
+         DEALLOCATE(tmpvw)
       END IF
 
 !     Now scattering the sorted lM%IEN to all processors

@@ -52,8 +52,9 @@
       DO iM=1, nMsh
          IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
          ALLOCATE(tmpV(maxnsd,msh(iM)%nNo))
+         ALLOCATE(tmpVe(msh(iM)%nEl))
          IF (outGrp.EQ.outGrp_WSS .OR. outGrp.EQ.outGrp_trac) THEN
-            CALL BPOST(msh(iM), tmpV, lY, lD, outGrp)
+            CALL BPOST(msh(iM), tmpV, tmpVe, lY, lD, outGrp)
             DO a=1, msh(iM)%nNo
                Ac = msh(iM)%gN(a)
                res(:,Ac) = tmpV(:,a)
@@ -323,39 +324,34 @@
 !     General purpose routine for post processing outputs at the
 !     faces. Currently this calculates WSS, which is t.n - (n.t.n)n
 !     Here t is stress tensor: t = \mu (grad(u) + grad(u)^T)
-      SUBROUTINE BPOST(lM, res, lY, lD, outGrp)
+      SUBROUTINE BPOST(lM, res, resE, lY, lD, outGrp)
       USE COMMOD
       USE ALLFUN
       IMPLICIT NONE
       TYPE(mshType), INTENT(INOUT) :: lM
-      REAL(KIND=RKIND), INTENT(OUT) :: res(maxnsd,lM%nNo)
+      REAL(KIND=RKIND), INTENT(OUT) :: res(maxnsd,lM%nNo), resE(lM%nEl)
       REAL(KIND=RKIND), INTENT(IN) :: lY(tDof,tnNo), lD(tDof,tnNo)
       INTEGER(KIND=IKIND), INTENT(IN) :: outGrp
-
       LOGICAL FSIeq
       INTEGER(KIND=IKIND) a, Ac, e, Ec, i, j, iEq, iFa, eNoN, g
       REAL(KIND=RKIND) Tdn(nsd), ndTdn, taue(nsd), ux(nsd,nsd), mu, w,
      2   nV(nsd), Jac, ks(nsd,nsd), lRes(maxnsd), p, gam, mu_s
       TYPE(fsType) :: fsP
-
       REAL(KIND=RKIND), ALLOCATABLE :: sA(:), sF(:,:), gnV(:,:),
-     2   lnV(:,:), xl(:,:), ul(:,:), pl(:), N(:), Nx(:,:)
-
+     2   lnV(:,:), xl(:,:), ul(:,:), pl(:), N(:), Nx(:,:), enV(:)
       IF (outGrp.NE.outGrp_WSS .AND. outGrp.NE.outGrp_trac) err =
      2   "Invalid output group. Correction is required in BPOST"
-
       iEq   = 1
       eNoN  = lM%eNoN
       FSIeq = .FALSE.
       IF (eq(iEq)%phys .EQ. phys_FSI) FSIeq = .TRUE.
-
       ALLOCATE (sA(tnNo), sF(maxnsd,tnNo), xl(nsd,eNoN), ul(nsd,eNoN),
-     2   gnV(nsd,tnNo), lnV(nsd,eNoN), N(eNoN), Nx(nsd,eNoN))
+     2   gnV(nsd,tnNo), lnV(nsd,eNoN), N(eNoN), Nx(nsd,eNoN), enV(nsd))
       sA   = 0._RKIND
       sF   = 0._RKIND
       gnV  = 0._RKIND
+      enV  = 0._RKIND
       lRes = 0._RKIND
-
 !     First creating the norm field
       DO iFa=1, lM%nFa
          DO a=1, lM%fa(iFa)%nNo
@@ -363,7 +359,6 @@
             gnV(:,Ac) = lM%fa(iFa)%nV(:,a)
          END DO
       END DO
-
 !     Update pressure function spaces
       IF (lM%nFs .EQ. 1) THEN
          fsP%nG    = lM%fs(1)%nG
@@ -386,21 +381,25 @@
          END DO
       END IF
       ALLOCATE(pl(fsP%eNoN))
-
-      DO iFa=1, lM%nFa
+!     fixme: have user indicate what boundary face is?
+!      DO iFa=1, lM%nFa
+      DO iFa=1, 1
          DO e=1, lM%fa(iFa)%nEl
             Ec = lM%fa(iFa)%gE(e)
             cDmn = DOMAIN(lM, iEq, Ec)
             IF (cDmn .EQ. 0) CYCLE
             IF (lM%eType .EQ. eType_NRB) CALL NRBNNX(lM, Ec)
-
+!     Get element normal
+            enV(:) = lM%fa(iFa)%enV(:,e)
 !     Finding the norm for all the nodes of this element, including
 !     those that don't belong to this face, which will be inerpolated
 !     from the nodes of the face
             nV = 0._RKIND
             DO a=1, eNoN
                Ac       = lM%IEN(a,Ec)
-               lnV(:,a) = gnV(:,Ac)
+!     fixme: switch between element and nodal normal
+!               lnV(:,a) = gnV(:,Ac)
+               lnV(:,a) = enV
                nV       = nV + lnV(:,a)
                xl(:,a)  = x(:,Ac)
                IF (FSIeq) THEN
@@ -478,6 +477,9 @@
                   sA(Ac)   = sA(Ac)   + w*N(a)
                   sF(:,Ac) = sF(:,Ac) + w*N(a)*lRes
                END DO
+
+!     Store element quantities
+               resE(Ec) = resE(Ec) + SQRT(NORM(lRes)) / lM%nG
             END DO
          END DO
       END DO
@@ -517,7 +519,7 @@
 
       LOGICAL flag
       INTEGER(KIND=IKIND) a, e, g, Ac, i, j, k, l, cPhys, insd,
-     2   nFn
+     2   nFn, nvw, nvwa
       REAL(KIND=RKIND) w, Jac, detF, Je, ya, Ja, elM, nu, lambda, mu,
      2   p, trS, vmises, xi(nsd), xi0(nsd), xp(nsd), ed(nsymd),
      3   Im(nsd,nsd), F(nsd,nsd), C(nsd,nsd), Eg(nsd,nsd), P1(nsd,nsd),
@@ -526,14 +528,18 @@
 
       INTEGER, ALLOCATABLE :: eNds(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), dl(:,:), yl(:,:),
-     2   fN(:,:), resl(:), Nx(:,:), N(:), sA(:), sF(:,:), sE(:)
+     2   fN(:,:), resl(:), Nx(:,:), N(:), sA(:), sF(:,:), sE(:), vwN(:),
+     3   vwNa(:)
 
       dof  = eq(iEq)%dof
       i    = eq(iEq)%s
       j    = i + 1
       k    = j + 1
       nFn  = lM%nFn
+      nvw  = lM%nvw
+
       IF (nFn .EQ. 0) nFn = 1
+      IF (nvw .EQ. 0) nvw = 1
 
 !     For higher order elements, we lower the order of shape functions
 !     to compute the quantities at corner nodes of elements. We then
@@ -553,9 +559,12 @@
       END IF
       CALL INITFS(fs, nsd)
 
+      nvwa = 1
+      IF (nvw .NE. 0) nvwa = nvw/lM%nG
+
       ALLOCATE (sA(tnNo), sF(m,tnNo), sE(lM%nEl), xl(nsd,fs%eNoN),
      2   dl(tDof,fs%eNoN), yl(tDof,fs%eNoN), fN(nsd,nFn), resl(m),
-     3   Nx(nsd,fs%eNoN), N(fs%eNoN))
+     3   Nx(nsd,fs%eNoN), N(fs%eNoN), vwN(nvw), vwNa(nvwa))
 
       sA   = 0._RKIND
       sF   = 0._RKIND
@@ -580,11 +589,15 @@
 
          IF (lM%eType .EQ. eType_NRB) CALL NRBNNX(lM, e)
 
-         fN = 0._RKIND
+         fN  = 0._RKIND
+         vwN = 0._RKIND
          IF (ALLOCATED(lM%fN)) THEN
             DO l=1, nFn
                fN(:,l) = lM%fN((l-1)*nsd+1:l*nsd,e)
             END DO
+         END IF
+         IF (ALLOCATED(lM%vwN)) THEN
+            vwN(:) = lM%vwN(:,e)
          END IF
 
          dl = 0._RKIND
@@ -597,6 +610,7 @@
          END DO
 
          Je = 0._RKIND
+         vwNa   = 0._RKIND
          DO g=1, fs%nG
             IF (g.EQ.1 .OR. .NOT.fs%lShpF) THEN
                CALL GNN(fs%eNoN, insd, fs%Nx(:,:,g), xl, Nx, Jac, Im)
@@ -734,7 +748,15 @@
                   IF (.NOT.ISZERO(detF)) sigma(:,:) = sigma(:,:) / detF
 
                ELSE IF (cPhys .EQ. phys_struct) THEN
-                  CALL GETPK2CC(eq(iEq)%dmn(cDmn), F, nFn, fN, ya, S,Dm)
+                  IF(eq(iEq)%dmn(cDmn)%stM%isoType .EQ. stISo_aniso)THEN
+                     vwNa(:) = vwN((g-1)*nvwa+1:g*nvwa)
+                     CALL GETPK2CC(eq(iEq)%dmn(cDmn), F, nFn, fN, ya, S, 
+     2                Dm, nvwa, vwNa)
+                  ELSE
+                     CALL GETPK2CC(eq(iEq)%dmn(cDmn), F, nFn, fN, ya, S, 
+     2                Dm, nvw, vwN)
+                  END IF
+
                   P1 = MATMUL(F, S)
                   sigma = MATMUL(P1, TRANSPOSE(F))
                   IF (.NOT.ISZERO(detF)) sigma(:,:) = sigma(:,:) / detF
@@ -765,10 +787,12 @@
                      resl(4) = sigma(1,2)
                      resl(5) = sigma(2,3)
                      resl(6) = sigma(3,1)
+                     sE(e)=sE(e)+w*(sigma(1,1)+sigma(2,2)+sigma(3,3))
                   ELSE
                      resl(1) = sigma(1,1)
                      resl(2) = sigma(2,2)
                      resl(3) = sigma(1,2)
+                     sE(e)=sE(e)+w*(sigma(1,1)+sigma(2,2))
                   END IF
 
 !              Von Mises stress

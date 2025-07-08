@@ -45,20 +45,26 @@
      2   Dg(tDof,tnNo)
 
       LOGICAL :: vmsStab
-      INTEGER(KIND=IKIND) a, e, g, l, Ac, eNoN, cPhys, iFn, nFn
+      INTEGER(KIND=IKIND) a, e, g, l, Ac, eNoN, cPhys, iFn, nFn, nvw,
+     2    nvwa
       REAL(KIND=RKIND) w, Jac, ksix(nsd,nsd)
       TYPE(fsType) :: fs(2)
 
       INTEGER(KIND=IKIND), ALLOCATABLE :: ptr(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xl(:,:), al(:,:), yl(:,:),
      2   dl(:,:), bfl(:,:), fN(:,:), pS0l(:,:), pSl(:), ya_l(:),
-     3   lR(:,:), lK(:,:,:), lKd(:,:,:)
+     3   lR(:,:), lK(:,:,:), lKd(:,:,:), vwN(:), vwNa(:)
       REAL(KIND=RKIND), ALLOCATABLE :: xwl(:,:), xql(:,:), Nwx(:,:),
      2   Nwxx(:,:), Nqx(:,:)
 
       eNoN = lM%eNoN
       nFn  = lM%nFn
+      nvw  = lM%nvw
+
+      nvwa = 1
+      IF (nvw .NE. 0) nvwa = nvw/lM%nG
       IF (nFn .EQ. 0) nFn = 1
+      IF (nvw .EQ. 0) nvw = 1
 
       IF (lM%nFs .EQ. 1) THEN
          vmsStab = .TRUE.
@@ -72,7 +78,7 @@
       ALLOCATE(ptr(eNoN), xl(nsd,eNoN), al(tDof,eNoN), yl(tDof,eNoN),
      2   dl(tDof,eNoN), bfl(nsd,eNoN), fN(nsd,nFn), pS0l(nsymd,eNoN),
      3   pSl(nsymd), ya_l(eNoN), lR(dof,eNoN), lK(dof*dof,eNoN,eNoN),
-     4   lKd(dof*nsd,eNoN,eNoN))
+     4   lKd(dof*nsd,eNoN,eNoN), vwN(nvw), vwNa(nvwa))
 
 !     Loop over all elements of mesh
       DO e=1, lM%nEl
@@ -103,6 +109,9 @@
                   fN(:,iFn) = lM%fN((iFn-1)*nsd+1:iFn*nsd,e)
                END DO
             END IF
+            IF (ALLOCATED(lM%vwN)) THEN
+               vwN(:) = lM%vwN(:,e)
+            END IF
             IF (ALLOCATED(pS0)) pS0l(:,a) = pS0(:,Ac)
             IF (cem%cpld) ya_l(a) = cem%Ya(Ac)
          END DO
@@ -129,6 +138,7 @@
          Nwx      = 0._RKIND
          Nqx      = 0._RKIND
          Nwxx     = 0._RKIND
+         vwNa     = 0._RKIND
 
 !        Gauss integration 1
          DO g=1, fs(1)%nG
@@ -160,8 +170,17 @@
      2               bfl, pS0l, pSl, lR, lK)
 
                CASE (phys_struct)
-                  CALL STRUCT3D(fs(1)%eNoN, nFn, w, fs(1)%N(:,g), Nwx,
-     2               al, yl, dl, bfl, fN, pS0l, pSl, ya_l, lR, lK)
+                  IF(eq(cEq)%dmn(cDmn)%stM%isoType .EQ. stISo_aniso)THEN
+                     vwNa(:) = vwN((g-1)*nvwa+1:g*nvwa)
+                     CALL STRUCT3D(fs(1)%eNoN, nFn, w,fs(1)%N(:,g), Nwx, 
+     2                   al, yl, dl, bfl, fN, pS0l, pSl, ya_l, lR, lK,
+     3                   nvwa, vwNa)
+                  ELSE
+                     CALL STRUCT3D(fs(1)%eNoN, nFn, w,fs(1)%N(:,g), Nwx, 
+     2                   al, yl, dl, bfl, fN, pS0l, pSl, ya_l, lR, lK,
+     3                   nvw, vwN)
+                  END IF
+
 
                CASE (phys_ustruct)
                   CALL USTRUCT3D_M(vmsStab, fs(1)%eNoN, fs(2)%eNoN, nFn,
@@ -183,7 +202,8 @@
 
                CASE (phys_struct)
                   CALL STRUCT2D(fs(1)%eNoN, nFn, w, fs(1)%N(:,g), Nwx,
-     2               al, yl, dl, bfl, fN, pS0l, pSl, ya_l, lR, lK)
+     2               al, yl, dl, bfl, fN, pS0l, pSl, ya_l, lR, lK, nvw,
+     3               vwN)
 
                CASE (phys_ustruct)
                   CALL USTRUCT2D_M(vmsStab, fs(1)%eNoN, fs(2)%eNoN, nFn,
@@ -261,7 +281,7 @@
       END DO ! e: loop
 
       DEALLOCATE(ptr, xl, al, yl, dl, bfl, fN, pS0l, pSl, ya_l, lR, lK,
-     2   lKd)
+     2   lKd, vwN, vwNa)
 
       CALL DESTROY(fs(1))
       CALL DESTROY(fs(2))

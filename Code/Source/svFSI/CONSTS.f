@@ -135,7 +135,7 @@
      4   bType_flx = 10, bType_zp = 11, bType_impD = 12, bType_flat =13,
      5   bType_para = 14, bType_ud = 15, bType_bfs = 16, bType_fix = 17,
      6   bType_hing = 18, bType_free = 19, bType_symm = 20,
-     7   bType_undefNeu = 21, bType_RCR = 22
+     7   bType_undefNeu = 21, bType_RCR = 22, bType_ref = 23
 !--------------------------------------------------------------------
 !     Body force types: volumetric (default), traction, Neumann
 !     (pressure based), time dependence (steady, unsteady, spatially
@@ -183,7 +183,8 @@
       INTEGER(KIND=IKIND), PARAMETER :: stIso_NA = 600, stIso_lin = 601,
      2   stIso_StVK = 602, stIso_mStVK = 603, stIso_nHook = 604,
      3   stIso_MR = 605, stIso_HGO_d = 606, stIso_HGO_ma = 607,
-     4   stIso_Gucci = 608, stIso_HO_d = 609, stIso_HO_ma = 610
+     4   stIso_Gucci = 608, stIso_HO_d = 609, stIso_HO_ma = 610,
+     5   stIso_aniso = 611, stIso_mix = 612
 !--------------------------------------------------------------------
 !     Type of constitutive model (volumetric) for structure eqn:
 !     Quadratic, Simo-Taylor91, Miehe94

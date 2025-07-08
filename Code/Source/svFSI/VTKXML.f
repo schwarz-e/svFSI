@@ -461,8 +461,9 @@
                outDof = outDof + eq(iEq)%output(iOut)%l
             END IF
 
-            IF (oGrp.EQ.outGrp_J .OR. oGrp.EQ.outGrp_Mises)
-     2         nOute = nOute + 1
+            IF (oGrp.EQ.outGrp_J .OR. oGrp.EQ.outGrp_Mises .OR.
+     2          oGrp.EQ.outGrp_cauchy .OR.  oGrp.EQ.outGrp_WSS)
+     3         nOute = nOute + 1
          END DO
       END DO
 
@@ -548,10 +549,24 @@
                   END DO
 
                CASE (outGrp_WSS, outGrp_trac)
-                  CALL BPOST(msh(iM), tmpV, lY, lD, oGrp)
+                  IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
+                  IF (ALLOCATED(tmpVe)) DEALLOCATE(tmpVe)
+                  ALLOCATE(tmpV(l,msh(iM)%nNo), tmpVe(msh(iM)%nEl))
+                  tmpVe = 0._RKIND
+
+!     nodal wss
+                  CALL BPOST(msh(iM), tmpV, tmpVe, lY, lD, oGrp)
                   DO a=1, msh(iM)%nNo
                      d(iM)%x(is:ie,a) = tmpV(1:l,a)
                   END DO
+!     element wss
+                  nOute = nOute + 1
+                  outNamesE(nOute) = "E_WSS"
+                  DO a=1, msh(iM)%nEl
+                     d(iM)%xe(nOute,a) = tmpVe(a)
+                  END DO
+
+                  DEALLOCATE(tmpV,tmpVe)
 
                CASE (outGrp_vort, outGrp_eFlx, outGrp_hFlx,
      2            outGrp_stInv, outGrp_vortex, outGrp_Visc)
@@ -591,6 +606,7 @@
 
                CASE (outGrp_fA)
                   IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
+                  IF (ALLOCATED(tmpVe)) DEALLOCATE(tmpVe)
                   ALLOCATE(tmpV(1,msh(iM)%nNo))
                   tmpV = 0._RKIND
                   IF (msh(iM)%nFn .EQ. 2)
@@ -603,6 +619,7 @@
 
                CASE (outGrp_stress, outGrp_cauchy, outGrp_mises)
                   IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
+                  IF (ALLOCATED(tmpVe)) DEALLOCATE(tmpVe)
                   ALLOCATE(tmpV(l,msh(iM)%nNo), tmpVe(msh(iM)%nEl))
                   tmpV  = 0._RKIND
                   tmpVe = 0._RKIND
@@ -627,11 +644,20 @@
                      END DO
                   END IF
 
+                  IF (oGrp .EQ. outGrp_cauchy) THEN
+                     nOute = nOute + 1
+                     outNamesE(nOute) = "E_Cauchy"
+                     DO a=1, msh(iM)%nEl
+                        d(iM)%xe(nOute,a) = tmpVe(a)
+                     END DO
+                  END IF
+
                   DEALLOCATE(tmpV, tmpVe)
                   ALLOCATE(tmpV(maxnsd,msh(iM)%nNo))
 
                CASE (outGrp_J, outGrp_F, outGrp_strain)
                   IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
+                  IF (ALLOCATED(tmpVe)) DEALLOCATE(tmpVe)
                   ALLOCATE(tmpV(l,msh(iM)%nNo), tmpVe(msh(iM)%nEl))
                   tmpV  = 0._RKIND
                   tmpVe = 0._RKIND
@@ -654,6 +680,7 @@
 
                CASE (outGrp_divV)
                   IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
+                  IF (ALLOCATED(tmpVe)) DEALLOCATE(tmpVe)
                   ALLOCATE(tmpV(1,msh(iM)%nNo))
                   tmpV = 0._RKIND
                   CALL DIVPOST(msh(iM), tmpV, lY, lD, iEq)
@@ -698,7 +725,7 @@
          RETURN
       END IF
 
-      DEALLOCATE(tmpV)
+      IF (ALLOCATED(tmpV)) DEALLOCATE(tmpV)
       ALLOCATE(tmpV(maxnsd, nNo))
 
 !     Writing to vtu file (master only)
@@ -811,9 +838,10 @@
          DEALLOCATE(tmpI)
       END IF
 
-!     Write element Jacobian and von Mises stress if necessary
+!     Write element Jacobian, Cauchy, and von Mises stress if necessary
       DO l=1, nOute
          ne = ne + 1
+         IF (ALLOCATED(tmpVe)) DEALLOCATE(tmpVe)
          ALLOCATE(tmpVe(nEl))
          tmpVe = 0._RKIND
          Ec = 0
